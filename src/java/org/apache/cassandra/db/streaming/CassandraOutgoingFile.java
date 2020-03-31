@@ -156,6 +156,11 @@ public class CassandraOutgoingFile implements OutgoingStream
         return ref.get().getPendingRepair();
     }
 
+    public int getManifestSize()
+    {
+        return manifest.components().size();
+    }
+
     @Override
     public void write(StreamSession session, DataOutputStreamPlus out, int version) throws IOException
     {

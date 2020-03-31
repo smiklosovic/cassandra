@@ -17,16 +17,20 @@
  */
 package org.apache.cassandra.streaming;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,6 +57,7 @@ public class StreamTransferTask extends StreamTask
     private final Map<Integer, ScheduledFuture> timeoutTasks = new HashMap<>();
 
     private long totalSize;
+    private int components;
 
     public StreamTransferTask(StreamSession session, TableId tableId)
     {
@@ -123,9 +128,17 @@ public class StreamTransferTask extends StreamTask
             Throwables.propagate(fail);
     }
 
+    public void setNumberOfComponents(int files)
+    {
+        components = files;
+    }
+
     public synchronized int getTotalNumberOfFiles()
     {
-        return streams.size();
+        if (components == 0)
+            return streams.size();
+        else
+            return components;
     }
 
     public long getTotalSize()
@@ -155,8 +168,8 @@ public class StreamTransferTask extends StreamTask
      * the task will release reference.
      *
      * @param sequenceNumber sequence number of stream sent.
-     * @param time time to timeout
-     * @param unit unit of given time
+     * @param time           time to timeout
+     * @param unit           unit of given time
      * @return scheduled future for timeout task
      */
     public synchronized ScheduledFuture scheduleTimeout(final int sequenceNumber, long time, TimeUnit unit)
