@@ -97,9 +97,21 @@ public class NetStats extends NodeToolCmd
                     double percentageSizeSent = ((double) totalSizeSent / totalSizeToSend) * 100;
 
                     if (humanReadable)
-                        System.out.printf("        Sending %d files, %s total. Already sent %d files (%.2f%%), %s total (%.2f%%)%n", totalFilesToSend, FileUtils.stringifyFileSize(totalSizeToSend), totalFilesSent, percentageFilesSent, FileUtils.stringifyFileSize(totalSizeSent), percentageSizeSent);
+                        System.out.printf("        Sending %d files, %s total. Already sent %d files (%.2f%%), %s total (%.2f%%)%n",
+                                          totalFilesToSend,
+                                          FileUtils.stringifyFileSize(totalSizeToSend),
+                                          totalFilesSent,
+                                          percentageFilesSent,
+                                          FileUtils.stringifyFileSize(totalSizeSent),
+                                          percentageSizeSent);
                     else
-                        System.out.printf("        Sending %d files, %d bytes total. Already sent %d files (%.2f%%), %d bytes total (%.2f%%) %n", totalFilesToSend, totalSizeToSend, totalFilesSent, percentageFilesSent, totalSizeSent, percentageSizeSent);
+                        System.out.printf("        Sending %d files, %d bytes total. Already sent %d files (%.2f%%), %d bytes total (%.2f%%) %n",
+                                          totalFilesToSend,
+                                          totalSizeToSend,
+                                          totalFilesSent,
+                                          percentageFilesSent,
+                                          totalSizeSent,
+                                          percentageSizeSent);
                     for (ProgressInfo progress : info.getSendingFiles())
                     {
                         System.out.printf("            %s%n", progress.toString(printPort));

@@ -398,7 +398,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
             if (stream instanceof CassandraOutgoingFile && ((CassandraOutgoingFile) stream).shouldStreamEntireSSTable())
             {
                 int manifestSize = ((CassandraOutgoingFile) stream).getManifestSize();
-                task.setNumberOfComponents(manifestSize);
+                task.setTotalNumberOfFiles(manifestSize);
             }
 
             task.addTransferStream(stream);

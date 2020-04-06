@@ -57,7 +57,7 @@ public class StreamTransferTask extends StreamTask
     private final Map<Integer, ScheduledFuture> timeoutTasks = new HashMap<>();
 
     private long totalSize;
-    private int components;
+    private int totalFiles;
 
     public StreamTransferTask(StreamSession session, TableId tableId)
     {
@@ -128,17 +128,17 @@ public class StreamTransferTask extends StreamTask
             Throwables.propagate(fail);
     }
 
-    public void setNumberOfComponents(int files)
+    public void setTotalNumberOfFiles(int files)
     {
-        components = files;
+        totalFiles = files;
     }
 
     public synchronized int getTotalNumberOfFiles()
     {
-        if (components == 0)
+        if (totalFiles == 0)
             return streams.size();
         else
-            return components;
+            return totalFiles;
     }
 
     public long getTotalSize()
