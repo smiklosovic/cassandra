@@ -191,8 +191,8 @@ public final class FileUtils
     {
         try
         {
-            if (!StorageService.instance.isDaemonSetupCompleted())
-                logger.info("Deleting file during startup: {}", file);
+            //if (!StorageService.instance.isDaemonSetupCompleted())
+                //logger.info("Deleting file during startup: {}", file);
 
             Files.delete(file.toPath());
         }
