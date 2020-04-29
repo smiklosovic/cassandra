@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import javax.annotation.Nullable;
@@ -882,32 +883,150 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         }
     }
 
+
     public void waitForSchema(int delay)
     {
-        // first sleep the delay to make sure we see all our peers
-        for (int i = 0; i < delay; i += 1000)
+        waitForSchema(delay, Gossiper.instance.getLiveTokenOwners());
+    }
+
+    public void waitForSchema(int delay, Set<InetAddress> endpoints)
+    {
+        waitForSchemaWithCallbacks(delay, endpoints.stream().map(MigrationTask.MigrationTaskCallback::new).collect(Collectors.toSet()));
+    }
+
+    public void waitForSchemaWithCallbacks(int delay, Set<MigrationTask.MigrationTaskCallback> callbacks)
+    {
+        waitForNotEmptyLocalVersion(delay);
+
+        logger.info("Waiting for schema agreement!");
+
+        long globalMigrationTaskWait = MigrationManager.instance.getMigrationTaskGlobalWaitInSeconds() * 1000;
+        long totalTime = 0;
+
+        while (totalTime < globalMigrationTaskWait)
         {
-            // if we see schema, we can proceed to the next check directly
-            if (!Schema.instance.getVersion().equals(SchemaConstants.emptyVersion))
+            List<SchemaAgreementMetadata> metadata = waitForSchemaAgreement(callbacks);
+
+            List<SchemaAgreementMetadata> notMatchingSchemas = metadata.stream().filter(m -> m.sleepingTime > 0).collect(toList());
+
+            if (!notMatchingSchemas.isEmpty())
             {
-                logger.debug("got schema: {}", Schema.instance.getVersion());
-                break;
+                logger.info("this node does not match schema with nodes: {}", notMatchingSchemas);
             }
-            Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS);
+
+            long roundTime = notMatchingSchemas.stream().mapToLong(m -> m.sleepingTime).sum();
+
+            if (roundTime == 0)
+            {
+                logger.info("Schemas are all in agreement!");
+                return;
+            }
+
+            totalTime += roundTime;
         }
-        // if our schema hasn't matched yet, wait until it has
-        // we do this by waiting for all in-flight migration requests and responses to complete
-        // (post CASSANDRA-1391 we don't expect this to be necessary very often, but it doesn't hurt to be careful)
-        if (!MigrationManager.isReadyForBootstrap())
+
+        throw new ConfigurationException(String.format("Unable to enforce that schema is in agreement in %s ms!", globalMigrationTaskWait));
+    }
+
+    private void waitForNotEmptyLocalVersion(int delay) {
+        // first sleep the delay to make sure we see all our peers
+
+        int totalTime = 0;
+
+        while (totalTime < delay)
         {
-            setMode(Mode.JOINING, "waiting for schema information to complete", true);
-            MigrationManager.waitUntilReadyForBootstrap();
+            UUID version = Schema.instance.getVersion();
+
+            if (!SchemaConstants.emptyVersion.equals(version))
+            {
+                logger.debug("got schema: {}", version);
+                return;
+            }
+
+            Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS);
+
+            totalTime += 1000;
         }
     }
 
+    /**
+     *
+     * @param callbacks callbacks to call on returning message after schema pull message was sent from this node
+     * @return list of metadata saying how much time each callback lasted, 0 means that the callback was not invoked at all
+     * hence nor schema pull message was sent either, it means that remote schema is already same one as the local one.
+     */
+    private List<SchemaAgreementMetadata> waitForSchemaAgreement(Set<MigrationTask.MigrationTaskCallback> callbacks)
+    {
+        final long resendingSleep = DatabaseDescriptor.getMinRpcTimeout() + (MigrationManager.instance.getMigrationTaskWaitInSeconds() * 1000);
+        final long alreadySentSleep = MigrationManager.instance.getMigrationTaskWaitInSeconds() * 1000;
+
+        setMode(Mode.JOINING, "schema not yet in agreement, sending new schema pull requests", true);
+
+        final UUID localVersion = Schema.instance.getVersion();
+
+        return callbacks.stream()
+                        .map(callback -> {
+                            InetAddress tokenOwner = callback.getEndpoint();
+
+                            SchemaAgreementMetadata metadata = new SchemaAgreementMetadata(tokenOwner, Gossiper.instance.getSchemaVersion(tokenOwner));
+
+                            // for testing purposes
+                            if (!callback.isRunningForcibly())
+                            {
+                                // if local and remote are equal, we have nothing to do
+                                if (localVersion.equals(metadata.schema))
+                                {
+                                    return metadata;
+                                }
+                            }
+
+                            logger.debug("Remote node {}, schema version: {}", tokenOwner.toString(), Schema.schemaVersionToString(metadata.schema));
+
+                            // if there is already an enpoint for which we are receiving a schema present, do not send
+                            // another one, just sleep for a while and iterate to the other callback / endpoint
+                            // otherwise schedule a schema pull (with no delay) and sleep longer until next node is tried
+                            if (MigrationTask.hasInFlighSchemaRequest(tokenOwner))
+                            {
+                                logger.debug("Schema request already in progress with: {}", tokenOwner.toString());
+                                metadata.sleepingTime = alreadySentSleep;
+                                Uninterruptibles.sleepUninterruptibly(alreadySentSleep, TimeUnit.MILLISECONDS);
+                            }
+                            else
+                            {
+                                logger.debug("Resending schema request to: {}", tokenOwner.toString());
+
+                                MigrationManager.scheduleSchemaPullNoDelay(tokenOwner,
+                                                                           Gossiper.instance.getEndpointStateForEndpoint(tokenOwner),
+                                                                           callback);
+
+                                metadata.sleepingTime = resendingSleep;
+                                Uninterruptibles.sleepUninterruptibly(resendingSleep, TimeUnit.MILLISECONDS);
+                            }
+
+                            return metadata;
+                        }).collect(toList());
+    }
+
+    private static final class SchemaAgreementMetadata
+    {
+        public InetAddress remote;
+        public UUID schema;
+        public long sleepingTime = 0;
+
+        public SchemaAgreementMetadata(InetAddress remote, UUID schema)
+        {
+            this.remote = remote;
+            this.schema = schema;
+        }
+
+        public String toString()
+        {
+            return "(" + remote + ',' + schema + ',' + sleepingTime + ')';
+        }
+    }
     @VisibleForTesting
-    public void joinTokenRing(int delay) throws ConfigurationException
-{
+    private void joinTokenRing(int delay) throws ConfigurationException
+    {
         joined = true;
 
         // We bootstrap if we haven't successfully bootstrapped before, as long as we are not a seed.

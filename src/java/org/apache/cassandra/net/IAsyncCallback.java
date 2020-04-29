@@ -54,4 +54,9 @@ public interface IAsyncCallback<T>
     {
         return false;
     }
+
+    default boolean isRunningForcibly()
+    {
+        return false;
+    }
 }
