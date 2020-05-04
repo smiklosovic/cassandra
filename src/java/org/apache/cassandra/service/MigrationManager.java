@@ -60,8 +60,6 @@ public class MigrationManager
 
     public static final int MIGRATION_DELAY_IN_MS = 60000;
 
-    private static final int MIGRATION_TASK_WAIT_IN_SECONDS = Integer.parseInt(System.getProperty("cassandra.migration_task_wait_in_seconds", "1"));
-
     private final List<MigrationListener> listeners = new CopyOnWriteArrayList<>();
 
     private MigrationManager() {}
@@ -76,19 +74,33 @@ public class MigrationManager
         listeners.remove(listener);
     }
 
+    public static void scheduleSchemaPullNoDelay(InetAddress endpoint, EndpointState state, MigrationTask.MigrationTaskCallback cb)
+    {
+        scheduleSchemaPull(endpoint, state, cb, true);
+    }
+
     public static void scheduleSchemaPull(InetAddress endpoint, EndpointState state)
+    {
+        scheduleSchemaPull(endpoint, state, new MigrationTask.MigrationTaskCallback(endpoint), false);
+    }
+
+    private static void scheduleSchemaPull(InetAddress endpoint, EndpointState state, MigrationTask.MigrationTaskCallback cb, boolean noDelay)
     {
         VersionedValue value = state.getApplicationState(ApplicationState.SCHEMA);
 
         if (!endpoint.equals(FBUtilities.getBroadcastAddress()) && value != null)
-            maybeScheduleSchemaPull(UUID.fromString(value.value), endpoint, state.getApplicationState(ApplicationState.RELEASE_VERSION).value);
+            maybeScheduleSchemaPull(UUID.fromString(value.value), endpoint, state.getApplicationState(ApplicationState.RELEASE_VERSION).value, noDelay, cb);
     }
 
     /**
      * If versions differ this node sends request with local migration list to the endpoint
      * and expecting to receive a list of migrations to apply locally.
      */
-    private static void maybeScheduleSchemaPull(final UUID theirVersion, final InetAddress endpoint, String  releaseVersion)
+    private static void maybeScheduleSchemaPull(final UUID theirVersion,
+                                                final InetAddress endpoint,
+                                                String releaseVersion,
+                                                boolean noDelay,
+                                                MigrationTask.MigrationTaskCallback cb)
     {
         String ourMajorVersion = FBUtilities.getReleaseVersionMajor();
         if (!releaseVersion.startsWith(ourMajorVersion))
@@ -97,17 +109,17 @@ public class MigrationManager
             return;
         }
 
-        if ((Schema.instance.getVersion() != null && Schema.instance.getVersion().equals(theirVersion)) || !shouldPullSchemaFrom(endpoint))
+        if (((Schema.instance.getVersion() != null && Schema.instance.getVersion().equals(theirVersion)) || !shouldPullSchemaFrom(endpoint)) && !cb.isRunningForcibly())
         {
             logger.debug("Not pulling schema because versions match or shouldPullSchemaFrom returned false");
             return;
         }
 
-        if (Schema.emptyVersion.equals(Schema.instance.getVersion()) || runtimeMXBean.getUptime() < MIGRATION_DELAY_IN_MS)
+        if (Schema.emptyVersion.equals(Schema.instance.getVersion()) || runtimeMXBean.getUptime() < MIGRATION_DELAY_IN_MS || noDelay)
         {
             // If we think we may be bootstrapping or have recently started, submit MigrationTask immediately
             logger.debug("Submitting migration task for {}", endpoint);
-            submitMigrationTask(endpoint);
+            submitMigrationTask(endpoint, cb);
         }
         else
         {
@@ -119,8 +131,7 @@ public class MigrationManager
                 EndpointState epState = Gossiper.instance.getEndpointStateForEndpoint(endpoint);
                 if (epState == null)
                 {
-                    logger.debug("epState vanished for {}, not submitting migration task", endpoint);
-                    return;
+                     return;
                 }
                 VersionedValue value = epState.getApplicationState(ApplicationState.SCHEMA);
                 UUID currentVersion = UUID.fromString(value.value);
@@ -130,7 +141,7 @@ public class MigrationManager
                     return;
                 }
                 logger.debug("submitting migration task for {}", endpoint);
-                submitMigrationTask(endpoint);
+                submitMigrationTask(endpoint, cb);
             };
             ScheduledExecutors.nonPeriodicTasks.schedule(runnable, MIGRATION_DELAY_IN_MS, TimeUnit.MILLISECONDS);
         }
@@ -138,11 +149,16 @@ public class MigrationManager
 
     private static Future<?> submitMigrationTask(InetAddress endpoint)
     {
+        return submitMigrationTask(endpoint, new MigrationTask.MigrationTaskCallback(endpoint));
+    }
+
+    private static Future<?> submitMigrationTask(InetAddress endpoint, MigrationTask.MigrationTaskCallback cb)
+    {
         /*
          * Do not de-ref the future because that causes distributed deadlock (CASSANDRA-3832) because we are
          * running in the gossip stage.
          */
-        return StageManager.getStage(Stage.MIGRATION).submit(new MigrationTask(endpoint));
+        return StageManager.getStage(Stage.MIGRATION).submit(new MigrationTask(endpoint, cb));
     }
 
     public static boolean shouldPullSchemaFrom(InetAddress endpoint)
@@ -163,27 +179,14 @@ public class MigrationManager
         return version == MessagingService.current_version || version == MessagingService.VERSION_3014;
     }
 
-    public static boolean isReadyForBootstrap()
+    public int getMigrationTaskWaitInSeconds()
     {
-        return MigrationTask.getInflightTasks().isEmpty();
+        return Integer.parseInt(System.getProperty("cassandra.migration_task_wait_in_seconds", "1"));
     }
 
-    public static void waitUntilReadyForBootstrap()
+    public int getMigrationTaskGlobalWaitInSeconds()
     {
-        CountDownLatch completionLatch;
-        while ((completionLatch = MigrationTask.getInflightTasks().poll()) != null)
-        {
-            try
-            {
-                if (!completionLatch.await(MIGRATION_TASK_WAIT_IN_SECONDS, TimeUnit.SECONDS))
-                    logger.error("Migration task failed to complete");
-            }
-            catch (InterruptedException e)
-            {
-                Thread.currentThread().interrupt();
-                logger.error("Migration task was interrupted");
-            }
-        }
+        return Integer.parseInt(System.getProperty("cassandra.migration_task_global_wait_in_seconds", "300"));
     }
 
     public void notifyCreateKeyspace(KeyspaceMetadata ksm)

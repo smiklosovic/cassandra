@@ -17,13 +17,12 @@
  */
 package org.apache.cassandra.service;
 
-import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,7 +32,7 @@ import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.SystemKeyspace.BootstrapState;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.gms.FailureDetector;
-import org.apache.cassandra.net.IAsyncCallback;
+import org.apache.cassandra.net.IAsyncCallbackWithFailure;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
@@ -41,24 +40,44 @@ import org.apache.cassandra.schema.SchemaKeyspace;
 import org.apache.cassandra.utils.WrappedRunnable;
 
 
-class MigrationTask extends WrappedRunnable
+public class MigrationTask extends WrappedRunnable
 {
     private static final Logger logger = LoggerFactory.getLogger(MigrationTask.class);
 
-    private static final ConcurrentLinkedQueue<CountDownLatch> inflightTasks = new ConcurrentLinkedQueue<>();
-
     private static final Set<BootstrapState> monitoringBootstrapStates = EnumSet.of(BootstrapState.NEEDS_BOOTSTRAP, BootstrapState.IN_PROGRESS);
 
-    private final InetAddress endpoint;
+    private static final Comparator<InetAddress> inetcomparator = new Comparator<InetAddress>()
+    {
+        public int compare(InetAddress addr1, InetAddress addr2)
+        {
+            return addr1.getHostAddress().compareTo(addr2.getHostAddress());
+        }
+    };
 
-    MigrationTask(InetAddress endpoint)
+    private static final Set<InetAddress> infFlightRequests = new ConcurrentSkipListSet<>(inetcomparator);
+
+    private final InetAddress endpoint;
+    private final IAsyncCallbackWithFailure<Collection<Mutation>> cb;
+
+    MigrationTask(InetAddress endpoint, IAsyncCallbackWithFailure<Collection<Mutation>> cb)
     {
         this.endpoint = endpoint;
+        this.cb = cb;
     }
 
-    public static ConcurrentLinkedQueue<CountDownLatch> getInflightTasks()
+    public static boolean addInFlightSchemaRequest(InetAddress ep)
     {
-        return inflightTasks;
+        return infFlightRequests.add(ep);
+    }
+
+    public static void completedInFlightSchemaRequest(InetAddress ep)
+    {
+        infFlightRequests.remove(ep);
+    }
+
+    public static boolean hasInFlighSchemaRequest(InetAddress ep)
+    {
+        return infFlightRequests.contains(ep);
     }
 
     public void runMayThrow() throws Exception
@@ -78,39 +97,62 @@ class MigrationTask extends WrappedRunnable
             return;
         }
 
-        MessageOut message = new MessageOut<>(MessagingService.Verb.MIGRATION_REQUEST, null, MigrationManager.MigrationsSerializer.instance);
-
-        final CountDownLatch completionLatch = new CountDownLatch(1);
-
-        IAsyncCallback<Collection<Mutation>> cb = new IAsyncCallback<Collection<Mutation>>()
+        if (monitoringBootstrapStates.contains(SystemKeyspace.getBootstrapState()) && !addInFlightSchemaRequest(endpoint))
         {
-            @Override
-            public void response(MessageIn<Collection<Mutation>> message)
+            logger.info("Skipped sending a migration request: node {} already has a request in flight", endpoint);
+            return;
+        }
+
+        MessageOut<?> message = new MessageOut<>(MessagingService.Verb.MIGRATION_REQUEST, null, MigrationManager.MigrationsSerializer.instance);
+
+        logger.info("Sending schema pull request to {} at {} with timeout {}", endpoint, System.currentTimeMillis(), message.getTimeout());
+
+        MessagingService.instance().sendRR(message, endpoint, cb, message.getTimeout(), true);
+    }
+
+    public static class MigrationTaskCallback implements IAsyncCallbackWithFailure<Collection<Mutation>>
+    {
+        private static final Logger logger = LoggerFactory.getLogger(MigrationTaskCallback.class);
+
+        private final InetAddress endpoint;
+
+        public MigrationTaskCallback(InetAddress endpoint)
+        {
+            this.endpoint = endpoint;
+        }
+
+        public InetAddress getEndpoint()
+        {
+            return endpoint;
+        }
+
+        @Override
+        public void response(MessageIn<Collection<Mutation>> message)
+        {
+            try
             {
-                try
-                {
-                    SchemaKeyspace.mergeSchemaAndAnnounceVersion(message.payload);
-                }
-                catch (ConfigurationException e)
-                {
-                    logger.error("Configuration exception merging remote schema", e);
-                }
-                finally
-                {
-                    completionLatch.countDown();
-                }
+                logger.trace("Received response to schema request from {} at {}", message.from, System.currentTimeMillis());
+                SchemaKeyspace.mergeSchemaAndAnnounceVersion(message.payload);
             }
-
-            public boolean isLatencyForSnitch()
+            catch (ConfigurationException e)
             {
-                return false;
+                logger.error("Configuration exception merging remote schema", e);
             }
-        };
+            finally
+            {
+                completedInFlightSchemaRequest(endpoint);
+            }
+        }
 
-        // Only save the latches if we need bootstrap or are bootstrapping
-        if (monitoringBootstrapStates.contains(SystemKeyspace.getBootstrapState()))
-            inflightTasks.offer(completionLatch);
+        public boolean isLatencyForSnitch()
+        {
+            return false;
+        }
 
-        MessagingService.instance().sendRR(message, endpoint, cb);
+        public void onFailure(InetAddress from)
+        {
+            logger.warn("Timed out waiting for schema response from {} at {}", endpoint, System.currentTimeMillis());
+            completedInFlightSchemaRequest(endpoint);
+        }
     }
 }
