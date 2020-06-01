@@ -129,6 +129,13 @@
     <property name="chronicle-wire.version" value="1.16.1" />
     <property name="chronicle-threads.version" value="1.16.0" />
 
+    <property name="dependency-check.home" value="${build.dir}/dependency-check-ant"/>
+    <property name="dependency-check.version" value="5.3.2"/>
+
+    <condition property="is.dependency.check.dir">
+      <available file="${build.dir}/dependency-check-ant" type="dir" />
+    </condition>
+
     <condition property="maven-ant-tasks.jar.exists">
       <available file="${build.dir}/maven-ant-tasks-${maven-ant-tasks.version}.jar" />
     </condition>
@@ -252,6 +259,46 @@
             <exclude name="**/ant-*.jar"/>
         </fileset>
     </path>
+
+    <!-- OWASP dependency check -->
+
+    <target name="dependency-check-download"
+      depends="jar"
+      description="Fetch OWASP Dependency checker"
+      unless="is.dependency.check.dir">
+
+      <echo>Downloading OWASP Dependency checks ...</echo>
+
+      <get src="https://dl.bintray.com/jeremy-long/owasp/dependency-check-ant-${dependency-check.version}-release.zip"
+           dest="${build.dir}/dependency-check-ant-${dependency-check.version}-release.zip" usetimestamp="true" />
+     
+      <unzip src="${build.dir}/dependency-check-ant-${dependency-check.version}-release.zip" dest="${build.dir}"/>
+    </target>
+
+    <target name="dependency-check" description="Dependency-Check Analysis" depends="dependency-check-download">
+
+      <path id="dependency-check.path">
+        <pathelement location="${dependency-check.home}/dependency-check-ant.jar"/>
+        <fileset dir="${dependency-check.home}/lib">
+          <include name="*.jar"/>
+        </fileset>
+      </path>
+
+      <taskdef resource="dependency-check-taskdefs.properties">
+        <classpath refid="dependency-check.path" />
+      </taskdef>
+
+      <dependency-check projectname="Apache Cassandra"
+                        reportoutputdirectory="${basedir}/build"
+                        reportformat="HTML"
+                        prettyPrint="true">
+          <fileset dir="${build.dir}/lib/jars">
+              <include name="**/*.jar"/>
+          </fileset>
+      </dependency-check>
+    </target>
+
+    <!-- end of OWASP dependency check -->
 
   <macrodef name="create-javadoc">
     <attribute name="destdir"/>
