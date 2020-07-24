@@ -21,6 +21,7 @@ import java.io.FileNotFoundException;
 import java.net.SocketException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -112,6 +113,16 @@ public final class JVMStabilityInspector
             inspectThrowable(t.getCause());
     }
 
+    public static void handleDiskError(final FSError fsError)
+    {
+        inspectThrowable(JVMStabilityInspector::inspectThrowable, fsError);
+    }
+
+    public static void handleCommitLogError(final FSError fsError)
+    {
+        inspectThrowable(JVMStabilityInspector::inspectCommitLogThrowable, fsError);
+    }
+
     public static void inspectCommitLogThrowable(Throwable t)
     {
         if (!StorageService.instance.isDaemonSetupCompleted())
@@ -123,6 +134,11 @@ public final class JVMStabilityInspector
             killer.killCurrentJVM(t);
         else
             inspectThrowable(t);
+    }
+
+    private static void inspectThrowable(final Consumer<FSError> fsErrorConsumer, final FSError throwable)
+    {
+        fsErrorConsumer.accept(throwable);
     }
 
     public static void killCurrentJVM(Throwable t, boolean quiet)
