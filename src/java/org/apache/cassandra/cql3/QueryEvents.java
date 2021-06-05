@@ -25,6 +25,8 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.annotation.Nullable;
 
@@ -32,6 +34,7 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.audit.AuditLogEntryCategory;
 import org.apache.cassandra.cql3.statements.BatchStatement;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.transport.Message;
@@ -46,6 +49,7 @@ public class QueryEvents
     public static final QueryEvents instance = new QueryEvents();
 
     private final Set<Listener> listeners = new CopyOnWriteArraySet<>();
+    private final IObfuscator queryObfuscator = new PasswordObfuscator();
 
     @VisibleForTesting
     public int listenerCount()
@@ -72,8 +76,9 @@ public class QueryEvents
     {
         try
         {
+            String obfuscatedQuery = possiblyObfuscateQuery(statement, query);
             for (Listener listener : listeners)
-                listener.querySuccess(statement, query, options, state, queryTime, response);
+                listener.querySuccess(statement, obfuscatedQuery, options, state, queryTime, response);
         }
         catch (Throwable t)
         {
@@ -90,8 +95,9 @@ public class QueryEvents
     {
         try
         {
+            String obfuscatedQuery = possiblyObfuscateQuery(statement, query);
             for (Listener listener : listeners)
-                listener.queryFailure(statement, query, options, state, cause);
+                listener.queryFailure(statement, obfuscatedQuery, options, state, cause);
         }
         catch (Throwable t)
         {
@@ -109,8 +115,9 @@ public class QueryEvents
     {
         try
         {
+            String obfuscatedQuery = possiblyObfuscateQuery(statement, query);
             for (Listener listener : listeners)
-                listener.executeSuccess(statement, query, options, state, queryTime, response);
+                listener.executeSuccess(statement, obfuscatedQuery, options, state, queryTime, response);
         }
         catch (Throwable t)
         {
@@ -128,8 +135,9 @@ public class QueryEvents
         String query = prepared != null ? prepared.rawCQLStatement : null;
         try
         {
+            String obfuscatedQuery = possiblyObfuscateQuery(statement, query);
             for (Listener listener : listeners)
-                listener.executeFailure(statement, query, options, state, cause);
+                listener.executeFailure(statement, obfuscatedQuery, options, state, cause);
         }
         catch (Throwable t)
         {
@@ -240,6 +248,12 @@ public class QueryEvents
         return !listeners.isEmpty();
     }
 
+    private String possiblyObfuscateQuery(CQLStatement statement, String query)
+    {
+        return statement.getAuditLogContext().auditLogEntryType.getCategory() == AuditLogEntryCategory.DCL ?
+               queryObfuscator.obfuscate(query) : query;
+    }
+
     public static interface Listener
     {
         default void querySuccess(CQLStatement statement,
@@ -291,5 +305,63 @@ public class QueryEvents
                                     String query,
                                     QueryState state,
                                     Exception cause) {}
+    }
+
+    public static interface IObfuscator
+    {
+        /**
+         * Obfuscates source string by replacing concerned content with obfuscation token.
+         *
+         * @param sourceString string to obfuscate
+         * @return obfuscated string, not containing concerned content
+         */
+        String obfuscate(String sourceString);
+
+        /**
+         *
+         * @return string which replaces a portion of a statement meant to be obfuscated
+         */
+        String getObfuscationToken();
+    }
+
+    /**
+     * Obfuscates passwords in a given string
+     */
+    public static class PasswordObfuscator implements IObfuscator
+    {
+        private static final String OBFUSCATION_TOKEN = "*******";
+        private static final String PASSWORD_TOKEN = "password";
+
+        private static final int PATTERN_FLAGS = Pattern.CASE_INSENSITIVE | Pattern.DOTALL;
+        private static final Pattern PASSWORD_PATTERN = Pattern.compile(".*password\\s*=?\\s*'(?<password>[^\\s]+)'.*",
+                                                                        PATTERN_FLAGS);
+
+        /**
+         * Obfuscates passwords in DCL statements.
+         *
+         * @param sourceString string to obfuscate
+         * @return obfuscated string, not containing passwords in plaintext
+         */
+        @Override
+        public String obfuscate(String sourceString)
+        {
+            Matcher passwordMatcher = PASSWORD_PATTERN.matcher(sourceString);
+            if (!passwordMatcher.matches())
+            {
+                return sourceString;
+            }
+
+            StringBuilder obfuscated = new StringBuilder();
+            int matchStart = passwordMatcher.start(PASSWORD_TOKEN);
+            int matchEnd = passwordMatcher.end(PASSWORD_TOKEN);
+            obfuscated.append(sourceString, 0, matchStart).append(OBFUSCATION_TOKEN).append(sourceString.substring(matchEnd));
+            return obfuscated.toString();
+        }
+
+        @Override
+        public String getObfuscationToken()
+        {
+            return OBFUSCATION_TOKEN;
+        }
     }
 }
