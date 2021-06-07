@@ -32,6 +32,7 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.cql3.statements.AuthenticationStatement;
 import org.apache.cassandra.cql3.statements.BatchStatement;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.transport.Message;
@@ -46,6 +47,8 @@ public class QueryEvents
     public static final QueryEvents instance = new QueryEvents();
 
     private final Set<Listener> listeners = new CopyOnWriteArraySet<>();
+
+    private final IObfuscator passwordObfuscator = new PasswordObfuscator();
 
     @VisibleForTesting
     public int listenerCount()
@@ -63,6 +66,12 @@ public class QueryEvents
         listeners.remove(listener);
     }
 
+    @VisibleForTesting
+    public IObfuscator getObfuscator()
+    {
+        return passwordObfuscator;
+    }
+
     public void notifyQuerySuccess(CQLStatement statement,
                                    String query,
                                    QueryOptions options,
@@ -72,8 +81,9 @@ public class QueryEvents
     {
         try
         {
+
             for (Listener listener : listeners)
-                listener.querySuccess(statement, query, options, state, queryTime, response);
+                listener.querySuccess(statement, possiblyObfuscateQuery(statement, query), options, state, queryTime, response);
         }
         catch (Throwable t)
         {
@@ -91,7 +101,7 @@ public class QueryEvents
         try
         {
             for (Listener listener : listeners)
-                listener.queryFailure(statement, query, options, state, cause);
+                listener.queryFailure(statement, possiblyObfuscateQuery(statement, query), options, state, cause);
         }
         catch (Throwable t)
         {
@@ -110,7 +120,7 @@ public class QueryEvents
         try
         {
             for (Listener listener : listeners)
-                listener.executeSuccess(statement, query, options, state, queryTime, response);
+                listener.executeSuccess(statement, possiblyObfuscateQuery(statement, query), options, state, queryTime, response);
         }
         catch (Throwable t)
         {
@@ -129,7 +139,7 @@ public class QueryEvents
         try
         {
             for (Listener listener : listeners)
-                listener.executeFailure(statement, query, options, state, cause);
+                listener.executeFailure(statement, possiblyObfuscateQuery(statement, query), options, state, cause);
         }
         catch (Throwable t)
         {
@@ -205,7 +215,7 @@ public class QueryEvents
                 try
                 {
                     for (Listener listener : listeners)
-                        listener.prepareSuccess(prepared.statement, query, state, queryTime, response);
+                        listener.prepareSuccess(prepared.statement, possiblyObfuscateQuery(prepared.statement, query), state, queryTime, response);
                 }
                 catch (Throwable t)
                 {
@@ -226,13 +236,22 @@ public class QueryEvents
         try
         {
             for (Listener listener : listeners)
-                listener.prepareFailure(statement, query, state, cause);
+                listener.prepareFailure(statement, possiblyObfuscateQuery(statement, query), state, cause);
         }
         catch (Throwable t)
         {
             noSpam1m.error("Failed notifying listeners", t);
             JVMStabilityInspector.inspectThrowable(t);
         }
+    }
+
+    private String possiblyObfuscateQuery(CQLStatement statement, String query)
+    {
+        if (statement instanceof AuthenticationStatement)
+        {
+            return passwordObfuscator.obfuscate(query);
+        }
+        return query;
     }
 
     public boolean hasListeners()
