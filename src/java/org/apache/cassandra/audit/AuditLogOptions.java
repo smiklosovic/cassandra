@@ -17,9 +17,13 @@
  */
 package org.apache.cassandra.audit;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
+import com.google.common.base.Strings;
 import org.apache.commons.lang3.StringUtils;
 
 import org.apache.cassandra.config.ParameterizedClass;
@@ -42,6 +46,129 @@ public class AuditLogOptions extends BinLogOptions
      */
     public String audit_logs_dir = System.getProperty("cassandra.logdir.audit",
                                                       System.getProperty("cassandra.logdir",".")+"/audit/");
+
+    public static class Builder
+    {
+        private boolean enabled;
+        private ParameterizedClass logger;
+        private String includedKeyspaces;
+        private String excludedKeyspaces;
+        private String includedCategories;
+        private String excludedCategories;
+        private String includedUsers;
+        private String excludedUsers;
+
+        public Builder()
+        {
+            this(new AuditLogOptions());
+        }
+
+        public Builder(final AuditLogOptions defaultOptions)
+        {
+            this.enabled = defaultOptions.enabled;
+            this.logger = defaultOptions.logger;
+            this.includedKeyspaces = defaultOptions.included_keyspaces;
+            this.excludedKeyspaces = defaultOptions.excluded_keyspaces;
+            this.includedCategories = defaultOptions.included_categories;
+            this.excludedCategories = defaultOptions.excluded_categories;
+            this.includedUsers = defaultOptions.included_users;
+            this.excludedUsers = defaultOptions.excluded_users;
+        }
+
+        public Builder withEnabled(boolean enabled)
+        {
+            this.enabled = enabled;
+            return this;
+        }
+
+        public Builder withLogger(final String loggerName, Map<String, String> parameters)
+        {
+            if (loggerName != null && !loggerName.trim().isEmpty())
+                this.logger = new ParameterizedClass(loggerName.trim(), parameters);
+
+            return this;
+        }
+
+        public Builder withIncludedKeyspaces(final String includedKeyspaces)
+        {
+            this.includedKeyspaces = sanitise(includedKeyspaces);
+            return this;
+        }
+
+        public Builder withExcludedKeyspaces(final String excludedKeyspaces)
+        {
+            this.excludedKeyspaces = sanitise(excludedKeyspaces);
+            return this;
+        }
+
+        public Builder withIncludedCategories(final String includedCategories)
+        {
+            this.includedCategories = sanitise(includedCategories);
+            return this;
+        }
+
+        public Builder withExcludedCategories(final String excludedCategories)
+        {
+            this.excludedCategories = sanitise(excludedCategories);
+            return this;
+        }
+
+        public Builder withIncludedUsers(final String includedUsers)
+        {
+            this.includedUsers = sanitise(includedUsers);
+            return this;
+        }
+
+        public Builder withExcludedUsers(final String excludedUsers)
+        {
+            this.excludedUsers = sanitise(excludedUsers);
+            return this;
+        }
+
+        public AuditLogOptions build()
+        {
+            final AuditLogOptions auditLogOptions = new AuditLogOptions();
+
+            auditLogOptions.enabled = this.enabled;
+            auditLogOptions.logger = this.logger;
+            auditLogOptions.included_keyspaces = this.includedKeyspaces;
+            auditLogOptions.excluded_keyspaces = this.excludedKeyspaces;
+            auditLogOptions.included_categories = this.includedCategories;
+            auditLogOptions.excluded_categories = this.excludedCategories;
+            auditLogOptions.included_users = this.includedUsers;
+            auditLogOptions.excluded_users = this.excludedUsers;
+
+            return auditLogOptions;
+        }
+
+        public static AuditLogOptions sanitise(final AuditLogOptions other)
+        {
+            final AuditLogOptions options = new AuditLogOptions();
+
+            options.enabled = other.enabled;
+            options.logger = other.logger;
+            options.included_keyspaces = sanitise(other.included_keyspaces);
+            options.excluded_keyspaces = sanitise(other.excluded_keyspaces);
+            options.included_categories = sanitise(other.included_categories);
+            options.excluded_categories = sanitise(other.excluded_categories);
+            options.included_users = sanitise(other.included_users);
+            options.excluded_users = sanitise(other.excluded_users);
+
+            return options;
+        }
+
+        private static String sanitise(final String input)
+        {
+            if (input == null || input.trim().isEmpty())
+                return StringUtils.EMPTY;
+
+            return Arrays.stream(input.split(","))
+                         .map(String::trim)
+                         .map(Strings::emptyToNull)
+                         .filter(Objects::nonNull)
+                         .collect(Collectors.joining(","));
+        }
+    }
 
     public String toString()
     {
