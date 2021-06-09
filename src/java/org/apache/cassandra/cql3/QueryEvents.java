@@ -247,11 +247,7 @@ public class QueryEvents
 
     private String possiblyObfuscateQuery(CQLStatement statement, String query)
     {
-        if (statement instanceof AuthenticationStatement)
-        {
-            return passwordObfuscator.obfuscate(query);
-        }
-        return query;
+        return statement instanceof AuthenticationStatement ? passwordObfuscator.obfuscate(query) : query;
     }
 
     public boolean hasListeners()
