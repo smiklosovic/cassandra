@@ -851,7 +851,12 @@ public class NodeProbe implements AutoCloseable
      */
     public void clearSnapshot(String tag, String... keyspaces) throws IOException
     {
-        ssProxy.clearSnapshot(tag, keyspaces);
+        clearSnapshot(Collections.emptyMap(), tag, keyspaces);
+    }
+
+    public void clearSnapshot(Map<String, Object> options, String tag, String... keyspaces) throws IOException
+    {
+        ssProxy.clearSnapshot(options, tag, keyspaces);
     }
 
     public Map<String, TabularData> getSnapshotDetails(Map<String, String> options)

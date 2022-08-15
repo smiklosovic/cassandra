@@ -26,8 +26,11 @@ import io.airlift.airline.Option;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import org.apache.cassandra.config.DurationSpec;
 import org.apache.cassandra.tools.NodeProbe;
 import org.apache.cassandra.tools.NodeTool.NodeToolCmd;
 
@@ -43,14 +46,26 @@ public class ClearSnapshot extends NodeToolCmd
     @Option(title = "clear_all_snapshots", name = "--all", description = "Removes all snapshots")
     private boolean clearAllSnapshots = false;
 
+    @Option(title = "older_than", name = "--older-than", description = "Clear snapshots older than specified time period.")
+    private String olderThan;
+
+    @Option(title = "older_than_timestamp", name = "--older-than-timestamp", description = "Clear snapshots older than specified timestamp.")
+    private Long olderThanTimestamp;
+
     @Override
     public void execute(NodeProbe probe)
     {
-        if(snapshotName.isEmpty() && !clearAllSnapshots)
+        if (snapshotName.isEmpty() && !clearAllSnapshots)
             throw new RuntimeException("Specify snapshot name or --all");
 
-        if(!snapshotName.isEmpty() && clearAllSnapshots)
+        if (!snapshotName.isEmpty() && clearAllSnapshots)
             throw new RuntimeException("Specify only one of snapshot name or --all");
+
+        if (olderThan != null && olderThanTimestamp != null)
+            throw new RuntimeException("Specify only one of --older-than or --older-than-timestamp");
+
+        if (olderThanTimestamp != null && olderThanTimestamp <= 0)
+            throw new RuntimeException("Parameter --older-than-timestamp has to be a positive integer.");
 
         StringBuilder sb = new StringBuilder();
 
@@ -59,18 +74,32 @@ public class ClearSnapshot extends NodeToolCmd
         if (keyspaces.isEmpty())
             sb.append("[all keyspaces]");
         else
-            sb.append("[").append(join(keyspaces, ", ")).append("]");
+            sb.append('[').append(join(keyspaces, ", ")).append(']');
 
         if (snapshotName.isEmpty())
             sb.append(" with [all snapshots]");
         else
-            sb.append(" with snapshot name [").append(snapshotName).append("]");
+            sb.append(" with snapshot name [").append(snapshotName).append(']');
 
-        probe.output().out.println(sb.toString());
+        if (olderThan != null)
+            sb.append(" older than ")
+              .append(new DurationSpec.LongSecondsBound(olderThan).toSeconds())
+              .append(" seconds.");
+
+        if (olderThanTimestamp != null)
+            sb.append(" older than timestamp ").append(olderThanTimestamp);
+
+        probe.output().out.println(sb);
 
         try
         {
-            probe.clearSnapshot(snapshotName, toArray(keyspaces, String.class));
+            Map<String, Object> parameters = new HashMap<>();
+            if (olderThan != null)
+                parameters.put("older_than", olderThan);
+            if (olderThanTimestamp != null)
+                parameters.put("older_than_timestamp", olderThanTimestamp);
+
+            probe.clearSnapshot(parameters, snapshotName, toArray(keyspaces, String.class));
         } catch (IOException e)
         {
             throw new RuntimeException("Error during clearing snapshots", e);
