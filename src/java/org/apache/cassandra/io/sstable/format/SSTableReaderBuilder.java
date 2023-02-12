@@ -287,9 +287,11 @@ public abstract class SSTableReaderBuilder
 
             boolean compression = components.contains(Component.COMPRESSION_INFO);
             try (FileHandle.Builder ibuilder = new FileHandle.Builder(descriptor.filenameFor(Component.PRIMARY_INDEX))
+                    .withDescriptor(descriptor)
                     .mmapped(DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap)
                     .withChunkCache(ChunkCache.instance);
-                    FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.filenameFor(Component.DATA)).compressed(compression)
+                    FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.filenameFor(Component.DATA)).withDescriptor(descriptor)
+                                                                                                                .compressed(compression)
                                                                                                                 .mmapped(DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap)
                                                                                                                 .withChunkCache(ChunkCache.instance))
             {
@@ -424,9 +426,11 @@ public abstract class SSTableReaderBuilder
                   Set<Component> components) throws IOException
         {
             try(FileHandle.Builder ibuilder = new FileHandle.Builder(descriptor.filenameFor(Component.PRIMARY_INDEX))
+                    .withDescriptor(descriptor)
                     .mmapped(DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap)
                     .withChunkCache(ChunkCache.instance);
-                    FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.filenameFor(Component.DATA)).compressed(components.contains(Component.COMPRESSION_INFO))
+                    FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.filenameFor(Component.DATA)).withDescriptor(descriptor)
+                                                                                                                .compressed(components.contains(Component.COMPRESSION_INFO))
                                                                                                                 .mmapped(DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap)
                                                                                                                 .withChunkCache(ChunkCache.instance))
             {

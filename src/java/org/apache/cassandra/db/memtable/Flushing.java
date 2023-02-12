@@ -37,11 +37,14 @@ import org.apache.cassandra.db.commitlog.IntervalSet;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.partitions.Partition;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
+import org.apache.cassandra.io.compress.ICompressor;
+import org.apache.cassandra.io.compress.IDictionaryTrainer;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.metrics.TableMetrics;
+import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -110,7 +113,7 @@ public class Flushing
                                                       descriptor,
                                                       flushSet.partitionCount());
 
-        return new FlushRunnable(flushSet, writer, cfs.metric, true);
+        return new FlushRunnable(flushSet, writer, descriptor, cfs.metadata, cfs.metric, true);
     }
 
     public static Throwable abortRunnables(List<FlushRunnable> runnables, Throwable t)
@@ -126,17 +129,23 @@ public class Flushing
         private final Memtable.FlushablePartitionSet<?> toFlush;
 
         private final SSTableMultiWriter writer;
+        private final Descriptor descriptor;
         private final TableMetrics metrics;
+        private final TableMetadataRef tableMetadataRef;
         private final boolean isBatchLogTable;
         private final boolean logCompletion;
 
         public FlushRunnable(Memtable.FlushablePartitionSet<?> flushSet,
                              SSTableMultiWriter writer,
+                             Descriptor descriptor,
+                             TableMetadataRef metadataRef,
                              TableMetrics metrics,
                              boolean logCompletion)
         {
             this.toFlush = flushSet;
             this.writer = writer;
+            this.descriptor = descriptor;
+            this.tableMetadataRef = metadataRef;
             this.metrics = metrics;
             this.isBatchLogTable = toFlush.metadata() == SystemKeyspace.Batches;
             this.logCompletion = logCompletion;
@@ -179,9 +188,34 @@ public class Flushing
             }
         }
 
+        private void maybeTrainData()
+        {
+            ICompressor sstableCompressor = tableMetadataRef.get().params.compression.getSstableCompressor();
+            if (!sstableCompressor.supportsDictionaryTraining())
+                return;
+
+            IDictionaryTrainer dictionaryTrainer = sstableCompressor.getDictionaryTrainer(descriptor);
+            if (dictionaryTrainer.getClass() == IDictionaryTrainer.NoOpDictionaryTrainer.class)
+                return;
+
+            if (dictionaryTrainer.isTrained())
+                return;
+
+            for (Partition partition : toFlush)
+            {
+                dictionaryTrainer.addSample(partition);
+            }
+
+            dictionaryTrainer.trainDictionary();
+
+            logger.info("Trained dictionary for memtable {} flushed range = [{}, {})",
+                        toFlush.memtable(), toFlush.from(), toFlush.to());
+        }
+
         @Override
         public SSTableMultiWriter call()
         {
+            maybeTrainData();
             writeSortedContents();
             return writer;
             // We don't close the writer on error as the caller aborts all runnables if one happens.

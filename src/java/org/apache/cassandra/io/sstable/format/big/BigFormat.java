@@ -121,7 +121,7 @@ public class BigFormat implements SSTableFormat
     // we always incremented the major version.
     static class BigVersion extends Version
     {
-        public static final String current_version = "nb";
+        public static final String current_version = "nc";
         public static final String earliest_supported_version = "ma";
 
         // ma (3.0.0): swap bf hash order
@@ -143,6 +143,7 @@ public class BigFormat implements SSTableFormat
         private final boolean hasAccurateMinMax;
         private final boolean hasOriginatingHostId;
         public final boolean hasMaxCompressedLength;
+        public final boolean supportsDictionary;
         private final boolean hasPendingRepair;
         private final boolean hasMetadataChecksum;
         private final boolean hasIsTransient;
@@ -169,6 +170,7 @@ public class BigFormat implements SSTableFormat
             hasIsTransient = version.compareTo("na") >= 0;
             hasMetadataChecksum = version.compareTo("na") >= 0;
             hasOldBfFormat = version.compareTo("na") < 0;
+            supportsDictionary = version.compareTo("nc") >= 0;
         }
 
         @Override
@@ -238,6 +240,12 @@ public class BigFormat implements SSTableFormat
         public boolean hasMaxCompressedLength()
         {
             return hasMaxCompressedLength;
+        }
+
+        @Override
+        public boolean supportsDictionary()
+        {
+            return supportsDictionary;
         }
 
         @Override

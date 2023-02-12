@@ -18,6 +18,7 @@
 package org.apache.cassandra.db.streaming;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -30,6 +31,7 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.CompressionParams;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
  * Container that carries compression parameters and chunks to decompress data from stream.
@@ -52,6 +54,8 @@ public abstract class CompressionInfo
      */
     public abstract CompressionMetadata.Chunk[] chunks();
 
+    public abstract ByteBuffer dictionary();
+
     /**
      * Computes the size of the file to transfer.
      *
@@ -64,6 +68,7 @@ public abstract class CompressionInfo
         {
             size += chunk.length + 4; // 4 bytes for CRC
         }
+        size += dictionary().limit();
         return size;
     }
 
@@ -94,7 +99,9 @@ public abstract class CompressionInfo
      * @param chunks the file chunks
      * @param parameters the compression parameters
      */
-    public static CompressionInfo newInstance(CompressionMetadata.Chunk[] chunks, CompressionParams parameters)
+    public static CompressionInfo newInstance(CompressionMetadata.Chunk[] chunks,
+                                              CompressionParams parameters,
+                                              ByteBuffer dictionary)
     {
         assert chunks != null && parameters != null;
 
@@ -104,6 +111,12 @@ public abstract class CompressionInfo
             public Chunk[] chunks()
             {
                 return chunks;
+            }
+
+            @Override
+            public ByteBuffer dictionary()
+            {
+                return dictionary;
             }
 
             @Override
@@ -125,7 +138,8 @@ public abstract class CompressionInfo
      * @param sections the file sections
      * @return a {@code CompressionInfo} that will computes the file chunks only upon request.
      */
-    static CompressionInfo newLazyInstance(CompressionMetadata metadata, List<SSTableReader.PartitionPositionBounds> sections)
+    static CompressionInfo newLazyInstance(CompressionMetadata metadata,
+                                           List<SSTableReader.PartitionPositionBounds> sections)
     {
         if (metadata == null)
         {
@@ -143,6 +157,12 @@ public abstract class CompressionInfo
                     chunks = metadata.getChunksForSections(sections);
 
                 return chunks;
+            }
+
+            @Override
+            public ByteBuffer dictionary()
+            {
+                return null;
             }
 
             @Override
@@ -180,6 +200,18 @@ public abstract class CompressionInfo
                 CompressionMetadata.Chunk.serializer.serialize(chunks[i], out, version);
             // compression params
             CompressionParams.serializer.serialize(info.parameters(), out, version);
+
+            // dictionary size and data itself
+            if (info.dictionary() != null)
+            {
+                byte[] dictionary = info.dictionary().array();
+                out.writeInt(dictionary.length);
+                out.write(info.dictionary());
+            }
+            else
+            {
+                out.writeInt(0);
+            }
         }
 
         public CompressionInfo deserialize(DataInputPlus in, int version) throws IOException
@@ -195,7 +227,17 @@ public abstract class CompressionInfo
 
             // compression params
             CompressionParams parameters = CompressionParams.serializer.deserialize(in, version);
-            return CompressionInfo.newInstance(chunks, parameters);
+
+            // dictionary
+            ByteBuffer dictionary = ByteBufferUtil.EMPTY_BYTE_BUFFER;
+            int dictionarySize = in.readInt();
+            if (dictionarySize != 0)
+            {
+                dictionary = ByteBuffer.allocate(dictionarySize);
+                in.readFully(dictionary.array());
+            }
+
+            return CompressionInfo.newInstance(chunks, parameters, dictionary);
         }
 
         public long serializedSize(CompressionInfo info, int version)

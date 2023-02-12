@@ -306,7 +306,7 @@ public class MmappedRegionsTest
         cf.deleteOnExit();
 
         MetadataCollector sstableMetadataCollector = new MetadataCollector(new ClusteringComparator(BytesType.instance));
-        try(SequentialWriter writer = new CompressedSequentialWriter(f, cf.absolutePath(),
+        try(SequentialWriter writer = new CompressedSequentialWriter(null, f, cf.absolutePath(),
                                                                      null, SequentialWriterOption.DEFAULT,
                                                                      CompressionParams.snappy(), sstableMetadataCollector))
         {
@@ -314,7 +314,7 @@ public class MmappedRegionsTest
             writer.finish();
         }
 
-        CompressionMetadata metadata = new CompressionMetadata(cf.absolutePath(), f.length(), true);
+        CompressionMetadata metadata = new CompressionMetadata(cf.absolutePath(), f.length(), true, false);
         try(ChannelProxy channel = new ChannelProxy(f);
             MmappedRegions regions = MmappedRegions.map(channel, metadata))
         {

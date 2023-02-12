@@ -28,16 +28,19 @@ import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.compress.CompressionMetadata;
 import org.apache.cassandra.io.compress.CorruptBlockException;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
+import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.utils.ChecksumType;
 
 public abstract class CompressedChunkReader extends AbstractReaderFileProxy implements ChunkReader
 {
+    final Descriptor descriptor;
     final CompressionMetadata metadata;
     final int maxCompressedLength;
 
-    protected CompressedChunkReader(ChannelProxy channel, CompressionMetadata metadata)
+    protected CompressedChunkReader(Descriptor descriptor, ChannelProxy channel, CompressionMetadata metadata)
     {
         super(channel, metadata.dataLength);
+        this.descriptor = descriptor;
         this.metadata = metadata;
         this.maxCompressedLength = metadata.maxCompressedLength();
         assert Integer.bitCount(metadata.chunkLength()) == 1; //must be a power of two
@@ -88,9 +91,9 @@ public abstract class CompressedChunkReader extends AbstractReaderFileProxy impl
         // we read the raw compressed bytes into this buffer, then uncompressed them into the provided one.
         private final ThreadLocalByteBufferHolder bufferHolder;
 
-        public Standard(ChannelProxy channel, CompressionMetadata metadata)
+        public Standard(Descriptor descriptor, ChannelProxy channel, CompressionMetadata metadata)
         {
-            super(channel, metadata);
+            super(descriptor, channel, metadata);
             bufferHolder = new ThreadLocalByteBufferHolder(metadata.compressor().preferredBufferType());
         }
 
@@ -132,7 +135,7 @@ public abstract class CompressedChunkReader extends AbstractReaderFileProxy impl
 
                     try
                     {
-                        metadata.compressor().uncompress(compressed, uncompressed);
+                        metadata.compressor().uncompress(descriptor, compressed, uncompressed);
                     }
                     catch (IOException e)
                     {
@@ -172,9 +175,9 @@ public abstract class CompressedChunkReader extends AbstractReaderFileProxy impl
     {
         protected final MmappedRegions regions;
 
-        public Mmap(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
+        public Mmap(Descriptor descriptor, ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
         {
-            super(channel, metadata);
+            super(descriptor, channel, metadata);
             this.regions = regions;
         }
 
@@ -212,7 +215,7 @@ public abstract class CompressedChunkReader extends AbstractReaderFileProxy impl
                     }
 
                     if (chunk.length < maxCompressedLength)
-                        metadata.compressor().uncompress(compressedChunk, uncompressed);
+                        metadata.compressor().uncompress(descriptor, compressedChunk, uncompressed);
                     else
                         uncompressed.put(compressedChunk);
                 }

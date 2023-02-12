@@ -45,6 +45,7 @@ import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.db.streaming.CompressedInputStream;
 import org.apache.cassandra.db.streaming.CompressionInfo;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.ChecksumType;
 
 import static org.junit.Assert.assertEquals;
@@ -125,7 +126,7 @@ public class CompressedInputStreamTest
         MetadataCollector collector = new MetadataCollector(new ClusteringComparator(BytesType.instance));
         CompressionParams param = CompressionParams.snappy(32, minCompressRatio);
         Map<Long, Long> index = new HashMap<Long, Long>();
-        try (CompressedSequentialWriter writer = new CompressedSequentialWriter(tmp,
+        try (CompressedSequentialWriter writer = new CompressedSequentialWriter(desc, tmp,
                                                                                 desc.filenameFor(Component.COMPRESSION_INFO),
                                                                                 null,
                                                                                 SequentialWriterOption.DEFAULT,
@@ -177,7 +178,7 @@ public class CompressedInputStreamTest
         }
 
         // read buffer using CompressedInputStream
-        CompressionInfo info = CompressionInfo.newInstance(chunks, param);
+        CompressionInfo info = CompressionInfo.newInstance(chunks, param, ByteBufferUtil.EMPTY_BYTE_BUFFER);
 
         if (testException)
         {

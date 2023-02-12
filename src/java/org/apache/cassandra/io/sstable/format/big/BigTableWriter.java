@@ -92,12 +92,13 @@ public class BigTableWriter extends SSTableWriter
         {
             final CompressionParams compressionParams = compressionFor(lifecycleNewTracker.opType());
 
-            dataFile = new CompressedSequentialWriter(new File(getFilename()),
-                                             descriptor.filenameFor(Component.COMPRESSION_INFO),
-                                             new File(descriptor.filenameFor(Component.DIGEST)),
-                                             writerOption,
-                                             compressionParams,
-                                             metadataCollector);
+            dataFile = new CompressedSequentialWriter(descriptor,
+                                                      new File(getFilename()),
+                                                      descriptor.filenameFor(Component.COMPRESSION_INFO),
+                                                      new File(descriptor.filenameFor(Component.DIGEST)),
+                                                      writerOption,
+                                                      compressionParams,
+                                                      metadataCollector);
         }
         else
         {
@@ -106,8 +107,9 @@ public class BigTableWriter extends SSTableWriter
                     new File(descriptor.filenameFor(Component.DIGEST)),
                     writerOption);
         }
-        dbuilder = new FileHandle.Builder(descriptor.filenameFor(Component.DATA)).compressed(compression)
-                                              .mmapped(DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap);
+        dbuilder = new FileHandle.Builder(descriptor.filenameFor(Component.DATA)).withDescriptor(descriptor)
+                                                                                 .compressed(compression)
+                                                                                 .mmapped(DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap);
         chunkCache.ifPresent(dbuilder::withChunkCache);
         iwriter = new IndexWriter(keyCount);
 
@@ -555,7 +557,8 @@ public class BigTableWriter extends SSTableWriter
         IndexWriter(long keyCount)
         {
             indexFile = new SequentialWriter(new File(descriptor.filenameFor(Component.PRIMARY_INDEX)), writerOption);
-            builder = new FileHandle.Builder(descriptor.filenameFor(Component.PRIMARY_INDEX)).mmapped(DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap);
+            builder = new FileHandle.Builder(descriptor.filenameFor(Component.PRIMARY_INDEX)).withDescriptor(descriptor)
+                                                                                             .mmapped(DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap);
             chunkCache.ifPresent(builder::withChunkCache);
             summary = new IndexSummaryBuilder(keyCount, metadata().params.minIndexInterval, Downsampling.BASE_SAMPLING_LEVEL);
             bf = FilterFactory.getFilter(keyCount, metadata().params.bloomFilterFpChance);

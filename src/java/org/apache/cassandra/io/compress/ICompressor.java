@@ -24,6 +24,8 @@ import java.util.Set;
 
 import com.google.common.collect.ImmutableSet;
 
+import org.apache.cassandra.io.sstable.Descriptor;
+
 public interface ICompressor
 {
     /**
@@ -41,6 +43,11 @@ public interface ICompressor
 
     public int uncompress(byte[] input, int inputOffset, int inputLength, byte[] output, int outputOffset) throws IOException;
 
+    default public int uncompress(Descriptor descriptor, byte[] input, int inputOffset, int inputLength, byte[] output, int outputOffset) throws IOException
+    {
+        return uncompress(input, inputOffset, inputLength, output, outputOffset);
+    }
+
     /**
      * Compression for ByteBuffers.
      *
@@ -50,12 +57,34 @@ public interface ICompressor
     public void compress(ByteBuffer input, ByteBuffer output) throws IOException;
 
     /**
+     * Compression for ByteBuffers.
+     *
+     * The data between input.position() and input.limit() is compressed and placed into output starting from output.position().
+     * Positions in both buffers are moved to reflect the bytes read and written. Limits are not changed.
+     */
+    default public void compress(Descriptor descriptor, ByteBuffer input, ByteBuffer output) throws IOException
+    {
+        compress(input, output);
+    }
+
+    /**
      * Decompression for DirectByteBuffers.
      *
      * The data between input.position() and input.limit() is uncompressed and placed into output starting from output.position().
      * Positions in both buffers are moved to reflect the bytes read and written. Limits are not changed.
      */
     public void uncompress(ByteBuffer input, ByteBuffer output) throws IOException;
+
+    /**
+     * Decompression for DirectByteBuffers.
+     *
+     * The data between input.position() and input.limit() is uncompressed and placed into output starting from output.position().
+     * Positions in both buffers are moved to reflect the bytes read and written. Limits are not changed.
+     */
+    default public void uncompress(Descriptor descriptor, ByteBuffer input, ByteBuffer output) throws IOException
+    {
+        uncompress(input, output);
+    }
 
     /**
      * Returns the preferred (most efficient) buffer type for this compressor.
@@ -82,5 +111,24 @@ public interface ICompressor
     default Set<Uses> recommendedUses()
     {
         return ImmutableSet.copyOf(EnumSet.allOf(Uses.class));
+    }
+
+    default boolean supportsDictionaryTraining()
+    {
+        return false;
+    }
+
+    default IDictionaryTrainer getDictionaryTrainer(Descriptor descriptor)
+    {
+        return IDictionaryTrainer.NO_OP;
+    }
+
+    default void persistDictionary(Descriptor descriptor, IDictionaryTrainer dictionaryTrainer)
+    {
+    }
+
+    default void removeDictionaryTrainer(Descriptor descriptor)
+    {
+
     }
 }

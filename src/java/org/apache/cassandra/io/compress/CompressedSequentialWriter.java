@@ -28,6 +28,7 @@ import java.util.zip.CRC32;
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
+import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.schema.CompressionParams;
@@ -62,9 +63,12 @@ public class CompressedSequentialWriter extends SequentialWriter
 
     private final int maxCompressedLength;
 
+    private final Descriptor descriptor;
+
     /**
      * Create CompressedSequentialWriter without digest file.
      *
+     * @param descriptor
      * @param file File to write
      * @param offsetsPath File name to write compression metadata
      * @param digestFile File to write digest
@@ -72,20 +76,23 @@ public class CompressedSequentialWriter extends SequentialWriter
      * @param parameters Compression mparameters
      * @param sstableMetadataCollector Metadata collector
      */
-    public CompressedSequentialWriter(File file,
+    public CompressedSequentialWriter(Descriptor descriptor,
+                                      File file,
                                       String offsetsPath,
                                       File digestFile,
                                       SequentialWriterOption option,
                                       CompressionParams parameters,
                                       MetadataCollector sstableMetadataCollector)
     {
-        super(file, SequentialWriterOption.newBuilder()
-                            .bufferSize(option.bufferSize())
-                            .bufferType(option.bufferType())
-                            .bufferSize(parameters.chunkLength())
-                            .bufferType(parameters.getSstableCompressor().preferredBufferType())
-                            .finishOnClose(option.finishOnClose())
-                            .build());
+        super(file,
+              SequentialWriterOption.newBuilder()
+                                    .bufferSize(option.bufferSize())
+                                    .bufferType(option.bufferType())
+                                    .bufferSize(parameters.chunkLength())
+                                    .bufferType(parameters.getSstableCompressor().preferredBufferType())
+                                    .finishOnClose(option.finishOnClose())
+                                    .build());
+        this.descriptor = descriptor;
         this.compressor = parameters.getSstableCompressor();
         this.digestFile = Optional.ofNullable(digestFile);
 
@@ -141,7 +148,7 @@ public class CompressedSequentialWriter extends SequentialWriter
             // compressing data with buffer re-use
             buffer.flip();
             compressed.clear();
-            compressor.compress(buffer, compressed);
+            compressor.compress(descriptor, buffer, compressed);
         }
         catch (IOException e)
         {
@@ -176,6 +183,12 @@ public class CompressedSequentialWriter extends SequentialWriter
         {
             // write an offset of the newly written chunk to the index file
             metadataWriter.addOffset(chunkOffset);
+            if (compressor.supportsDictionaryTraining())
+            {
+                IDictionaryTrainer dictionaryTrainer = compressor.getDictionaryTrainer(descriptor);
+                metadataWriter.addDictionary(dictionaryTrainer.getDictionary());
+            }
+
             chunkCount++;
 
             // write out the compressed data

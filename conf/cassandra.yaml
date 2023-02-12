@@ -564,7 +564,7 @@ commitlog_segment_size: 32MiB
 # table: Always flush with the same compressor that the table uses. This
 #        was the pre 4.0 behavior.
 #
-# flush_compression: fast
+flush_compression: table
 
 # any class that implements the SeedProvider interface and has a
 # constructor that takes a Map<String, String> of parameters will do.

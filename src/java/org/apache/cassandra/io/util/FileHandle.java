@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.compress.CompressionMetadata;
+import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.utils.NativeLibrary;
 import org.apache.cassandra.utils.concurrent.Ref;
 import org.apache.cassandra.utils.concurrent.RefCounted;
@@ -242,6 +243,7 @@ public class FileHandle extends SharedCloseableImpl
     {
         private final String path;
 
+        private Descriptor descriptor;
         private ChannelProxy channel;
         private CompressionMetadata compressionMetadata;
         private MmappedRegions regions;
@@ -261,6 +263,12 @@ public class FileHandle extends SharedCloseableImpl
         {
             this.channel = channel;
             this.path = channel.filePath();
+        }
+
+        public Builder withDescriptor(Descriptor descriptor)
+        {
+            this.descriptor = descriptor;
+            return this;
         }
 
         public Builder compressed(boolean compressed)
@@ -371,7 +379,7 @@ public class FileHandle extends SharedCloseableImpl
                     if (compressed)
                     {
                         regions = MmappedRegions.map(channelCopy, compressionMetadata);
-                        rebuffererFactory = maybeCached(new CompressedChunkReader.Mmap(channelCopy, compressionMetadata,
+                        rebuffererFactory = maybeCached(new CompressedChunkReader.Mmap(descriptor, channelCopy, compressionMetadata,
                                                                                        regions));
                     }
                     else
@@ -385,7 +393,7 @@ public class FileHandle extends SharedCloseableImpl
                     regions = null;
                     if (compressed)
                     {
-                        rebuffererFactory = maybeCached(new CompressedChunkReader.Standard(channelCopy, compressionMetadata));
+                        rebuffererFactory = maybeCached(new CompressedChunkReader.Standard(descriptor, channelCopy, compressionMetadata));
                     }
                     else
                     {

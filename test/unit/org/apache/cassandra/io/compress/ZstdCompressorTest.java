@@ -18,12 +18,19 @@
 
 package org.apache.cassandra.io.compress;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 
 import com.google.common.collect.ImmutableMap;
+import org.junit.Assert;
 import org.junit.Test;
 
 import com.github.luben.zstd.Zstd;
+import com.github.luben.zstd.ZstdDictCompress;
+import com.github.luben.zstd.ZstdDictDecompress;
+import com.github.luben.zstd.ZstdDictTrainer;
+import org.apache.cassandra.io.compress.ZstdDictionaryCompressor.ZstdDictionaryTrainer;
 
 import static org.junit.Assert.assertEquals;
 
@@ -49,5 +56,68 @@ public class ZstdCompressorTest
     public void badCompressionLevelParamThrowsExceptionMax()
     {
         ZstdCompressor.create(ImmutableMap.of(ZstdCompressor.COMPRESSION_LEVEL_OPTION_NAME, Integer.toString(Zstd.maxCompressionLevel() + 1)));
+    }
+
+    @Test
+    public void testDict() throws Exception
+    {
+        int allSamples = 0;
+        int countOfSamples = 0;
+
+        ZstdDictTrainer trainer = new ZstdDictTrainer(1024, 1024 * 1024);
+        for (int j = 0; j < 1000; j++)
+        {
+            byte[] sample = ("very long hello world string " + j).getBytes(StandardCharsets.UTF_8);
+            if (trainer.addSample(sample))
+            {
+                allSamples += sample.length;
+                countOfSamples++;
+            }
+            else
+                break;
+        }
+        byte[] dict_buff = trainer.trainSamples();
+
+        System.out.println("dict length " + dict_buff.length);
+        System.out.println("all samples length " + allSamples);
+        System.out.println("count of samples " + countOfSamples);
+
+        String jsonString = "very long hello world string";
+
+        byte[] json = jsonString.getBytes(StandardCharsets.UTF_8);
+        ZstdDictCompress zstdDictCompress = new ZstdDictCompress(dict_buff, Zstd.defaultCompressionLevel());
+        byte[] compressed = Zstd.compress(json, zstdDictCompress);
+
+        // Tricky moment, you have to pass json full length to decompress method
+        int jsonFullLength = json.length;
+
+        // Decompress
+        ZstdDictDecompress zstdDictDecompress = new ZstdDictDecompress(dict_buff);
+        byte[] decompressed = Zstd.decompress(compressed, zstdDictDecompress, jsonFullLength);
+        String jsonStringResult = new String(decompressed, StandardCharsets.UTF_8);
+
+        System.out.println(jsonString);
+        System.out.println(jsonStringResult);
+        System.out.println(compressed.length);
+        System.out.println(decompressed.length);
+    }
+
+    @Test
+    public void testTrainer() throws Exception
+    {
+        ZstdDictionaryTrainer trainer = new ZstdDictionaryTrainer(1024, 1024 * 1024, 3);
+
+        for (int j = 0; j < 1000; j++)
+        {
+            System.out.println(j);
+            byte[] sample = ("very long hello world string " + j).getBytes(StandardCharsets.UTF_8);
+            trainer.addSample(sample);
+        }
+
+        trainer.trainDictionary();
+
+        ByteBuffer dictionary = trainer.getDictionary();
+
+        Assert.assertNotNull(dictionary);
     }
 }

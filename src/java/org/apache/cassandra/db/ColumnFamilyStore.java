@@ -2565,7 +2565,10 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
         // TODO: Can we write directly to stream, skipping disk?
         Memtable.FlushablePartitionSet<?> firstDataSet = dataSets.get(0);
-        SSTableMultiWriter writer = createSSTableMultiWriter(newSSTableDescriptor(directories.getDirectoryForNewSSTables()),
+
+        Descriptor descriptor = newSSTableDescriptor(directories.getDirectoryForNewSSTables());
+
+        SSTableMultiWriter writer = createSSTableMultiWriter(descriptor,
                                                              keys,
                                                              0,
                                                              repairSessionID,
@@ -2579,7 +2582,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         try
         {
             for (Memtable.FlushablePartitionSet<?> dataSet : dataSets)
-                new Flushing.FlushRunnable(dataSet, writer, metric, false).call();  // executes on this thread
+                new Flushing.FlushRunnable(dataSet, writer, descriptor, metadata, metric, false).call();  // executes on this thread
 
             return writer;
         }

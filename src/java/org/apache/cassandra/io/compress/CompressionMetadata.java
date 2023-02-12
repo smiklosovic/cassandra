@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.io.compress;
 
+import java.nio.ByteBuffer;
 import java.nio.file.NoSuchFileException;
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -61,6 +62,7 @@ public class CompressionMetadata
     private final long chunkOffsetsSize;
     public final String indexFilePath;
     public final CompressionParams parameters;
+    private final ByteBuffer dictionary;
 
     /**
      * Create metadata about given compressed file including uncompressed data length, chunk size
@@ -86,11 +88,14 @@ public class CompressionMetadata
     @VisibleForTesting
     public CompressionMetadata(Descriptor desc, long compressedLength)
     {
-        this(desc.filenameFor(Component.COMPRESSION_INFO), compressedLength, desc.version.hasMaxCompressedLength());
+        this(desc.filenameFor(Component.COMPRESSION_INFO),
+             compressedLength,
+             desc.version.hasMaxCompressedLength(),
+             desc.version.supportsDictionary());
     }
 
     @VisibleForTesting
-    public CompressionMetadata(String indexFilePath, long compressedLength, boolean hasMaxCompressedSize)
+    public CompressionMetadata(String indexFilePath, long compressedLength, boolean hasMaxCompressedSize, boolean hasDictionary)
     {
         this.indexFilePath = indexFilePath;
 
@@ -109,6 +114,7 @@ public class CompressionMetadata
             int maxCompressedSize = Integer.MAX_VALUE;
             if (hasMaxCompressedSize)
                 maxCompressedSize = stream.readInt();
+
             try
             {
                 parameters = new CompressionParams(compressorName, chunkLength, maxCompressedSize, options);
@@ -121,6 +127,26 @@ public class CompressionMetadata
             dataLength = stream.readLong();
             compressedFileLength = compressedLength;
             chunkOffsets = readChunkOffsets(stream);
+
+            ByteBuffer dict = null;
+            if (hasDictionary)
+            {
+                try
+                {
+                    int dictLenght = stream.readInt();
+                    if (dictLenght != 0)
+                    {
+                        dict = ByteBuffer.allocate(dictLenght);
+                        stream.readFully(dict);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ex.printStackTrace();
+                }
+            }
+
+            this.dictionary = dict;
         }
         catch (FileNotFoundException | NoSuchFileException e)
         {
@@ -136,7 +162,7 @@ public class CompressionMetadata
 
     // do not call this constructor directly, unless used in testing
     @VisibleForTesting
-    public CompressionMetadata(String filePath, CompressionParams parameters, Memory offsets, long offsetsSize, long dataLength, long compressedLength)
+    public CompressionMetadata(String filePath, CompressionParams parameters, Memory offsets, long offsetsSize, long dataLength, long compressedLength, ByteBuffer dictionary)
     {
         this.indexFilePath = filePath;
         this.parameters = parameters;
@@ -144,6 +170,7 @@ public class CompressionMetadata
         this.compressedFileLength = compressedLength;
         this.chunkOffsets = offsets;
         this.chunkOffsetsSize = offsetsSize;
+        this.dictionary = dictionary;
     }
 
     public ICompressor compressor()
@@ -168,6 +195,11 @@ public class CompressionMetadata
     public long offHeapSize()
     {
         return chunkOffsets.size();
+    }
+
+    public ByteBuffer dictionary()
+    {
+        return dictionary;
     }
 
     public void addTo(Ref.IdentityCollection identities)
@@ -327,6 +359,7 @@ public class CompressionMetadata
         private int maxCount = 100;
         private SafeMemory offsets = new SafeMemory(maxCount * 8L);
         private int count = 0;
+        private ByteBuffer dictionary;
 
         // provided by user when setDescriptor
         private long dataLength, chunkCount;
@@ -351,6 +384,11 @@ public class CompressionMetadata
                 offsets = newOffsets;
             }
             offsets.setLong(8L * count++, offset);
+        }
+
+        public void addDictionary(ByteBuffer dictionary)
+        {
+            this.dictionary = dictionary;
         }
 
         private void writeHeader(DataOutput out, long dataLength, int chunks)
@@ -406,6 +444,21 @@ public class CompressionMetadata
                 for (int i = 0; i < count; i++)
                     out.writeLong(offsets.getLong(i * 8L));
 
+                if (dictionary == null)
+                {
+                    out.writeInt(0);
+                }
+                else
+                {
+                    // size of dictionary
+                    out.writeInt(dictionary.array().length);
+                    // dictionary itself
+                    for (byte b : dictionary.array())
+                    {
+                        out.write(b);
+                    }
+                }
+
                 out.flush();
                 out.sync();
             }
@@ -434,7 +487,7 @@ public class CompressionMetadata
             if (tCount < this.count)
                 compressedLength = tOffsets.getLong(tCount * 8L);
 
-            return new CompressionMetadata(filePath, parameters, tOffsets, tCount * 8L, dataLength, compressedLength);
+            return new CompressionMetadata(filePath, parameters, tOffsets, tCount * 8L, dataLength, compressedLength, dictionary);
         }
 
         /**
