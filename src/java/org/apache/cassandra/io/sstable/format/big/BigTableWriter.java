@@ -93,11 +93,11 @@ public class BigTableWriter extends SSTableWriter
             final CompressionParams compressionParams = compressionFor(lifecycleNewTracker.opType());
 
             dataFile = new CompressedSequentialWriter(new File(getFilename()),
-                                             descriptor.filenameFor(Component.COMPRESSION_INFO),
-                                             new File(descriptor.filenameFor(Component.DIGEST)),
-                                             writerOption,
-                                             compressionParams,
-                                             metadataCollector);
+                                                      descriptor.filenameFor(Component.COMPRESSION_INFO),
+                                                      new File(descriptor.filenameFor(Component.DIGEST)),
+                                                      writerOption,
+                                                      compressionParams,
+                                                      metadataCollector);
         }
         else
         {
