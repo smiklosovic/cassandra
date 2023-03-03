@@ -62,7 +62,7 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
 {
     public static final String REPLICATION_FACTOR = "replication_factor";
     
-    private final Map<String, ReplicationFactor> datacenters;
+    protected final Map<String, ReplicationFactor> datacenters;
     private final ReplicationFactor aggregateRf;
     private static final Logger logger = LoggerFactory.getLogger(NetworkTopologyStrategy.class);
 
@@ -226,12 +226,12 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
         return builder.build();
     }
 
-    private int sizeOrZero(Multimap<?, ?> collection)
+    protected int sizeOrZero(Multimap<?, ?> collection)
     {
         return collection != null ? collection.asMap().size() : 0;
     }
 
-    private int sizeOrZero(Collection<?> collection)
+    protected int sizeOrZero(Collection<?> collection)
     {
         return collection != null ? collection.size() : 0;
     }
