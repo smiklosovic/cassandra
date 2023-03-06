@@ -88,7 +88,9 @@ public class TopologyStrategyTest
     public static Collection<Object[]> strategies()
     {
         return Arrays.asList(new Object[]{ NetworkTopologyStrategy.class },
-                             new Object[]{ RackAwareTopologyStrategy.class });
+                             new Object[]{ RackAwareTopologyStrategy.class},
+                             new Object[] { SpotNetworkTopologyStrategy.class },
+                             new Object[] { SpotRackAwareTopologyStrategy.class });
     }
 
     private AbstractReplicationStrategy getTopologyStrategy(String keyspace,
@@ -100,6 +102,10 @@ public class TopologyStrategyTest
             return new NetworkTopologyStrategy(keyspace, metadata, snitch, options);
         else if (topologyStrategy == RackAwareTopologyStrategy.class)
             return new RackAwareTopologyStrategy(keyspace, metadata, snitch, options);
+        else if (topologyStrategy == SpotNetworkTopologyStrategy.class)
+            return new SpotNetworkTopologyStrategy(keyspace, metadata, snitch, options);
+        else if (topologyStrategy == SpotRackAwareTopologyStrategy.class)
+            return new SpotRackAwareTopologyStrategy(keyspace, metadata, snitch, options);
         throw new IllegalStateException();
     }
 
@@ -129,6 +135,12 @@ public class TopologyStrategyTest
             assert ((RackAwareTopologyStrategy) strategy).getReplicationFactor("DC1").allReplicas == 3;
             assert ((RackAwareTopologyStrategy) strategy).getReplicationFactor("DC2").allReplicas == 2;
             assert ((RackAwareTopologyStrategy) strategy).getReplicationFactor("DC3").allReplicas == 1;
+        }
+        else if (strategy instanceof SpotNetworkTopologyStrategy)
+        {
+            assert ((SpotNetworkTopologyStrategy) strategy).getReplicationFactor("DC1").allReplicas == 3;
+            assert ((SpotNetworkTopologyStrategy) strategy).getReplicationFactor("DC2").allReplicas == 2;
+            assert ((SpotNetworkTopologyStrategy) strategy).getReplicationFactor("DC3").allReplicas == 1;
         }
 
         // Query for the natural hosts
@@ -276,7 +288,7 @@ public class TopologyStrategyTest
                                                                               .stream()
                                                                               .collect(Collectors.toMap(Map.Entry::getKey, x -> Integer.toString(x.getValue()))));
 
-        Assume.assumeTrue(strategy.getClass() == NetworkTopologyStrategy.class);
+        Assume.assumeTrue(strategy.getClass() != RackAwareTopologyStrategy.class && strategy.getClass() != SpotRackAwareTopologyStrategy.class);
 
         for (int i = 0; i < 1000; ++i)
         {

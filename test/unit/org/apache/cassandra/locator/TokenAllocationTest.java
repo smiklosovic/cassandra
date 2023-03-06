@@ -33,13 +33,15 @@ import org.junit.Test;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner.LongToken;
-import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.dht.tokenallocator.OfflineTokenAllocator;
+import org.apache.cassandra.service.MetadataService;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.OutputHandler;
 import org.mockito.Mockito;
 
 import static org.apache.cassandra.locator.InetAddressAndPort.getByAddress;
+import static org.apache.cassandra.locator.SpotNetworkTopologyStrategy.DatacenterEndpoints.SPOT_NODE_TAG;
+import static org.apache.cassandra.locator.SpotNetworkTopologyStrategy.DatacenterEndpoints.TAG_KEY_NAME;
 
 public class TokenAllocationTest
 {
@@ -153,6 +155,18 @@ public class TokenAllocationTest
             return this;
         }
 
+        public TopologyBuilder add(String dc, String rack, InetAddressAndPort addr, boolean isSpot)
+        {
+            nodes.put(addr, NodeInfo.create(dc, rack));
+            if (isSpot)
+                MetadataService.instance.addMetadata(addr, new HashMap<String, String>()
+                {{
+                    put(TAG_KEY_NAME, SPOT_NODE_TAG);
+                }});
+
+            return this;
+        }
+
         private TopologyBuilder()
         {
         }
@@ -167,18 +181,15 @@ public class TokenAllocationTest
     public void allocationTest()
     {
         Map<InetAddressAndPort, NodeInfo> topology = TopologyBuilder.create()
-                                                                    .add(DC1, r1, n1)
+                                                                    .add(DC1, r1, n1, true)
                                                                     .add(DC1, r1, n2)
                                                                     .add(DC1, r1, n3)
-                                                                    .add(DC1, r1, n4)
+                                                                    .add(DC1, r2, n4, true)
                                                                     .add(DC1, r2, n5)
                                                                     .add(DC1, r2, n6)
-                                                                    .add(DC1, r2, n7)
-                                                                    .add(DC1, r2, n8)
+                                                                    .add(DC1, r3, n7, true)
+                                                                    .add(DC1, r3, n8)
                                                                     .add(DC1, r3, n9)
-                                                                    .add(DC1, r3, n10)
-                                                                    .add(DC1, r3, n11)
-                                                                    .add(DC1, r3, n12)
                                                                     .build();
 
         IEndpointSnitch snitch = new TestingSnitch(topology);
@@ -195,9 +206,6 @@ public class TokenAllocationTest
                                                                                     .put(DC1, n7)
                                                                                     .put(DC1, n8)
                                                                                     .put(DC1, n9)
-                                                                                    .put(DC1, n10)
-                                                                                    .put(DC1, n11)
-                                                                                    .put(DC1, n12)
                                                                                     .build();
 
         ImmutableMap<String, ImmutableMultimap<String, InetAddressAndPort>> racks = ImmutableMap.<String, ImmutableMultimap<String, InetAddressAndPort>>builder()
@@ -205,15 +213,12 @@ public class TokenAllocationTest
                                                                                                                            .put(r1, n1)
                                                                                                                            .put(r1, n2)
                                                                                                                            .put(r1, n3)
-                                                                                                                           .put(r1, n4)
+                                                                                                                           .put(r2, n4)
                                                                                                                            .put(r2, n5)
                                                                                                                            .put(r2, n6)
-                                                                                                                           .put(r2, n7)
-                                                                                                                           .put(r2, n8)
-                                                                                                                           .put(r3, n9)
-                                                                                                                           .put(r3, n10)
-                                                                                                                           .put(r3, n11)
-                                                                                                                           .put(r3, n12).build()).build();
+                                                                                                                           .put(r3, n7)
+                                                                                                                           .put(r3, n8)
+                                                                                                                           .put(r3, n9).build()).build();
 
         Mockito.when(tokenMetadataTopology.getDatacenterEndpoints()).thenReturn(datacenterEndpoints);
         Mockito.when(tokenMetadataTopology.getDatacenterRacks()).thenReturn(racks);
@@ -227,16 +232,16 @@ public class TokenAllocationTest
         {{
             put("dc1", "5");
         }};
-        AbstractReplicationStrategy strategy = new NetworkTopologyStrategy("ks1", metadata, snitch, configOptions);
+        AbstractReplicationStrategy strategy = new SpotNetworkTopologyStrategy("ks1", metadata, snitch, configOptions);
 
-        for (int run = 0; run < 10; run++)
+        for (int run = 0; run < 1; run++)
         {
             metadata.cloneOnlyTokenMap();
 
-            InetAddressAndPort[] nodes = new InetAddressAndPort[]{ n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12 };
+            InetAddressAndPort[] nodes = new InetAddressAndPort[]{ n1, n2, n3, n4, n5, n6, n7, n8, n9 };
 
             List<OfflineTokenAllocator.FakeNode> allocation = OfflineTokenAllocator.allocate(5, 256,
-                                                                                             new int[]{ 3, 3, 3, 3 },
+                                                                                             new int[]{ 3, 3, 3 },
                                                                                              new OutputHandler.SystemOutput(false, true, true),
                                                                                              FBUtilities.newPartitioner(Murmur3Partitioner.class.getSimpleName()));
 
@@ -246,16 +251,12 @@ public class TokenAllocationTest
                 metadata.updateNormalTokens(fakeNode.tokens(), nodes[i]);
             }
 
-            Map<Token, Set<InetAddressAndPort>> violations = new HashMap<>();
             Map<String, Integer> placement = new HashMap<>();
 
             long numberOfViolations = 0;
 
             for (long i = 0; i < 1_000_000_000L; i++)
             {
-                if (!violations.isEmpty())
-                    break;
-
                 placement.clear();
 
                 LongToken token = Murmur3Partitioner.instance.getRandomToken();
@@ -270,13 +271,10 @@ public class TokenAllocationTest
 
                 for (Map.Entry<String, Integer> placementEntry : placement.entrySet())
                     if (placementEntry.getValue() >= 3)
-                    {
                         numberOfViolations++;
-                        //violations.put(token, replicas);
-                    }
             }
 
-            System.out.println(run + " " + (numberOfViolations / 3));
+            System.out.println(placement);
         }
     }
 }
