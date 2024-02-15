@@ -73,6 +73,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.rules.TestName;
+import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,6 +108,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.EncryptionOptions;
 import org.apache.cassandra.cql3.functions.FunctionName;
 import org.apache.cassandra.cql3.functions.types.ParseUtils;
+import org.apache.cassandra.cql3.validation.operations.experiment.CassandraConfigurationRunner;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.Keyspace;
@@ -195,6 +197,7 @@ import static org.junit.Assert.fail;
 /**
  * Base class for CQL tests.
  */
+@RunWith(CassandraConfigurationRunner.class)
 public abstract class CQLTester
 {
     /**
