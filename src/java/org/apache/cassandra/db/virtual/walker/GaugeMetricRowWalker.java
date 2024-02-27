@@ -18,8 +18,7 @@
 package org.apache.cassandra.db.virtual.walker;
 
 import org.apache.cassandra.db.virtual.model.GaugeMetricRow;
-import org.apache.cassandra.db.virtual.proc.Column;
-import org.apache.cassandra.db.virtual.proc.RowWalker;
+import org.apache.cassandra.db.virtual.model.Column;
 
 /**
  * {@link org.apache.cassandra.db.virtual.model.GaugeMetricRow} row metadata and data walker.

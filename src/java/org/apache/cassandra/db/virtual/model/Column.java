@@ -16,12 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.db.virtual.proc;
+package org.apache.cassandra.db.virtual.model;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+
+import org.apache.cassandra.db.virtual.walker.RowWalker;
 
 /**
  * Annotation to mark a walk order for a {@link RowWalker}. Annotation is used on a method that returns a value and

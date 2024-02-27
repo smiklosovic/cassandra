@@ -33,7 +33,7 @@ import org.apache.cassandra.service.ClientWarn;
  * @deprecated The "cql_metrics" virtual table is no longer used, and will be removed in a future release. Please,
  * use "system_metrics.cql_group" virtual table instead.
  */
-@Deprecated(since = "5.0")
+@Deprecated(since = "5.1")
 final class CQLMetricsTable extends AbstractVirtualTable
 {
     public static final String TABLE_NAME = "cql_metrics";

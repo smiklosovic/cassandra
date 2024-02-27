@@ -18,8 +18,6 @@
 
 package org.apache.cassandra.db.virtual.model;
 
-import org.apache.cassandra.db.virtual.proc.Column;
-
 
 /**
  * Test meter metric test representation for a {@link org.apache.cassandra.db.virtual.CollectionVirtualTableAdapter}.

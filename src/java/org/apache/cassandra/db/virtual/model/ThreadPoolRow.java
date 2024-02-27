@@ -18,7 +18,6 @@
 
 package org.apache.cassandra.db.virtual.model;
 
-import org.apache.cassandra.db.virtual.proc.Column;
 import org.apache.cassandra.metrics.ThreadPoolMetrics;
 
 /**

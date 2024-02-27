@@ -16,9 +16,11 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.db.virtual.proc;
+package org.apache.cassandra.db.virtual.walker;
 
 import java.util.function.Supplier;
+
+import org.apache.cassandra.db.virtual.model.Column;
 
 /**
  * Utility class for quick iteration over row attributes and row values.

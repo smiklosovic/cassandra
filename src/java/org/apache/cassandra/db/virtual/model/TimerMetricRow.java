@@ -20,7 +20,6 @@ package org.apache.cassandra.db.virtual.model;
 
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.Timer;
-import org.apache.cassandra.db.virtual.proc.Column;
 
 import static org.apache.cassandra.metrics.CassandraMetricsRegistry.Metrics;
 
