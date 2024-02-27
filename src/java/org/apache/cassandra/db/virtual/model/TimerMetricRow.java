@@ -24,7 +24,6 @@ import org.apache.cassandra.db.virtual.proc.Column;
 
 import static org.apache.cassandra.metrics.CassandraMetricsRegistry.Metrics;
 
-
 /**
  * Timer metric representation for a {@link org.apache.cassandra.db.virtual.CollectionVirtualTableAdapter}.
  */
@@ -35,6 +34,7 @@ public class TimerMetricRow
 
     public TimerMetricRow(String key, Metric value)
     {
+        assert value instanceof Timer : "expected type of value should be Timer";
         this.key = key;
         this.value = (Timer) value;
     }

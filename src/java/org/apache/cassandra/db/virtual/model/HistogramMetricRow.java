@@ -25,7 +25,6 @@ import org.apache.cassandra.db.virtual.proc.Column;
 
 import static org.apache.cassandra.metrics.CassandraMetricsRegistry.Metrics;
 
-
 /**
  * Historgam metric representation for a {@link org.apache.cassandra.db.virtual.CollectionVirtualTableAdapter}.
  */
@@ -36,6 +35,7 @@ public class HistogramMetricRow
 
     public HistogramMetricRow(String key, Metric value)
     {
+        assert value instanceof Histogram : "expected type of value should be Histogram";
         this.key = key;
         this.value = ((Histogram) value).getSnapshot();
     }

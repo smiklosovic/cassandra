@@ -38,17 +38,17 @@ public class VirtualKeyspace
     public VirtualKeyspace(String name, Collection<VirtualTable> tables)
     {
         this.name = name;
-        this.tables = ImmutableList.copyOf(tables);
 
         List<String> duplicates = tables.stream()
-                .map(VirtualTable::name)
-                .distinct()
-                .filter(entry -> Collections.frequency(tables, entry) > 1)
-                .collect(Collectors.toList());
+                                        .map(VirtualTable::name)
+                                        .distinct()
+                                        .filter(entry -> Collections.frequency(tables, entry) > 1)
+                                        .collect(Collectors.toList());
 
         if (!duplicates.isEmpty())
             throw new IllegalArgumentException(String.format("Duplicate table names in virtual keyspace %s: %s", name, duplicates));
 
+        this.tables = ImmutableList.copyOf(tables);
         metadata = KeyspaceMetadata.virtual(name, Tables.of(Iterables.transform(tables, VirtualTable::metadata)));
     }
 

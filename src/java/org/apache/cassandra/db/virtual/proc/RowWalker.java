@@ -27,8 +27,16 @@ import java.util.function.Supplier;
  */
 public interface RowWalker<R>
 {
+    /**
+     * Returns number of colums of a given type.
+     *
+     * @param type type of column to get number of columns of
+     * @return number of colums of such type
+     */
     int count(Column.Type type);
+
     void visitMeta(MetadataVisitor visitor);
+
     void visitRow(R row, RowMetadataVisitor visitor);
 
     interface MetadataVisitor

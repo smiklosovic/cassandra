@@ -24,13 +24,14 @@ import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.dht.LocalPartitioner;
 import org.apache.cassandra.metrics.CQLMetrics;
+import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.service.ClientWarn;
 
 /**
  * @deprecated The "cql_metrics" virtual table is no longer used, and will be removed in a future release. Please,
- * use "system_metrics.clq_group" virtual table instead.
+ * use "system_metrics.cql_group" virtual table instead.
  */
 @Deprecated(since = "5.0")
 final class CQLMetricsTable extends AbstractVirtualTable
@@ -75,8 +76,9 @@ final class CQLMetricsTable extends AbstractVirtualTable
         addRow(result, PREPARED_STATEMENTS_RATIO, cqlMetrics.preparedStatementsRatio.getValue());
         addRow(result, REGULAR_STATEMENTS_EXECUTED, cqlMetrics.regularStatementsExecuted.getCount());
 
-        ClientWarn.instance.warn("The \"" + TABLE_NAME + "\" virtual table is deprecated. " +
-                "Please, use \"system_metrics.clq_group\" virtual table instead.");
+        ClientWarn.instance.warn(String.format("The \"%s\" virtual table is deprecated. " +
+                                               "Please, use \"%s.cql_group\" virtual table instead.",
+                                               TABLE_NAME, SchemaConstants.VIRTUAL_METRICS));
         return result;
     }
 

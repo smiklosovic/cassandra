@@ -24,7 +24,6 @@ import org.apache.cassandra.db.virtual.proc.Column;
 
 import static org.apache.cassandra.metrics.CassandraMetricsRegistry.Metrics;
 
-
 /**
  * Gauge metric representation for a {@link org.apache.cassandra.db.virtual.CollectionVirtualTableAdapter}.
  */
@@ -35,6 +34,7 @@ public class GaugeMetricRow
 
     public GaugeMetricRow(String key, Metric value)
     {
+        assert value instanceof Gauge : "expected type of value should be Gauge";
         this.key = key;
         this.value = (Gauge<?>) value;
     }

@@ -20,6 +20,7 @@ package org.apache.cassandra.db.virtual;
 
 import com.google.common.collect.AbstractIterator;
 import com.google.common.collect.ImmutableMap;
+
 import org.apache.cassandra.db.Clustering;
 import org.apache.cassandra.db.DataRange;
 import org.apache.cassandra.db.DecoratedKey;
@@ -98,26 +99,28 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
 {
     private static final Pattern ONLY_ALPHABET_PATTERN = Pattern.compile("[^a-zA-Z1-9]");
     private static final List<Pair<String, String>> knownAbbreviations = Arrays.asList(Pair.create("CAS", "Cas"),
-            Pair.create("CIDR", "Cidr"));
+                                                                                       Pair.create("CIDR", "Cidr"));
     private static final Map<Class<?>, ? extends AbstractType<?>> converters = ImmutableMap.<Class<?>, AbstractType<?>>builder()
-            .put(String.class, UTF8Type.instance)
-            .put(Integer.class, Int32Type.instance)
-            .put(Integer.TYPE, Int32Type.instance)
-            .put(Long.class, LongType.instance)
-            .put(Long.TYPE, LongType.instance)
-            .put(Float.class, FloatType.instance)
-            .put(Float.TYPE, FloatType.instance)
-            .put(Double.class, DoubleType.instance)
-            .put(Double.TYPE, DoubleType.instance)
-            .put(Boolean.class, BooleanType.instance)
-            .put(Boolean.TYPE, BooleanType.instance)
-            .put(Byte.class, ByteType.instance)
-            .put(Byte.TYPE, ByteType.instance)
-            .put(Short.class, ShortType.instance)
-            .put(Short.TYPE, ShortType.instance)
-            .put(UUID.class, UUIDType.instance)
-            .build();
-    /** The map is used to avoid getting column metadata for each regular column for each row. */
+                                                                                           .put(String.class, UTF8Type.instance)
+                                                                                           .put(Integer.class, Int32Type.instance)
+                                                                                           .put(Integer.TYPE, Int32Type.instance)
+                                                                                           .put(Long.class, LongType.instance)
+                                                                                           .put(Long.TYPE, LongType.instance)
+                                                                                           .put(Float.class, FloatType.instance)
+                                                                                           .put(Float.TYPE, FloatType.instance)
+                                                                                           .put(Double.class, DoubleType.instance)
+                                                                                           .put(Double.TYPE, DoubleType.instance)
+                                                                                           .put(Boolean.class, BooleanType.instance)
+                                                                                           .put(Boolean.TYPE, BooleanType.instance)
+                                                                                           .put(Byte.class, ByteType.instance)
+                                                                                           .put(Byte.TYPE, ByteType.instance)
+                                                                                           .put(Short.class, ShortType.instance)
+                                                                                           .put(Short.TYPE, ShortType.instance)
+                                                                                           .put(UUID.class, UUIDType.instance)
+                                                                                           .build();
+    /**
+     * The map is used to avoid getting column metadata for each regular column for each row.
+     */
     private final ConcurrentHashMap<String, ColumnMetadata> columnMetas = new ConcurrentHashMap<>();
     private final RowWalker<R> walker;
     private final Iterable<R> data;
@@ -146,57 +149,53 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
         this.decorateKeyToRowExtractor = keyToRowExtractor;
     }
 
-    public static <C, R> CollectionVirtualTableAdapter<R> create(
-            String keySpaceName,
-            String rawTableName,
-            String description,
-            RowWalker<R> walker,
-            Iterable<C> container,
-            Function<C, R> rowFunc)
+    public static <C, R> CollectionVirtualTableAdapter<R> create(String keySpaceName,
+                                                                 String rawTableName,
+                                                                 String description,
+                                                                 RowWalker<R> walker,
+                                                                 Iterable<C> container,
+                                                                 Function<C, R> rowFunc)
     {
         return new CollectionVirtualTableAdapter<>(keySpaceName,
-                virtualTableNameStyle(rawTableName),
-                description,
-                walker,
-                () -> StreamSupport.stream(container.spliterator(), false)
-                        .map(rowFunc).iterator());
+                                                   virtualTableNameStyle(rawTableName),
+                                                   description,
+                                                   walker,
+                                                   () -> StreamSupport.stream(container.spliterator(), false)
+                                                                      .map(rowFunc).iterator());
     }
 
-    public static <K, C, R> CollectionVirtualTableAdapter<R> createSinglePartitionedKeyFiltered(
-            String keySpaceName,
-            String rawTableName,
-            String description,
-            RowWalker<R> walker,
-            Map<K, C> map,
-            Predicate<K> mapKeyFilter,
-            BiFunction<K, C, R> rowConverter)
+    public static <K, C, R> CollectionVirtualTableAdapter<R> createSinglePartitionedKeyFiltered(String keySpaceName,
+                                                                                                String rawTableName,
+                                                                                                String description,
+                                                                                                RowWalker<R> walker,
+                                                                                                Map<K, C> metricsMap,
+                                                                                                Predicate<K> mapKeyFilter,
+                                                                                                BiFunction<K, C, R> rowConverter)
     {
-        return createSinglePartitioned(keySpaceName, rawTableName, description, walker, map, mapKeyFilter,
-                Objects::nonNull, rowConverter);
+        return createSinglePartitioned(keySpaceName, rawTableName, description, walker, metricsMap, mapKeyFilter,
+                                       Objects::nonNull, rowConverter);
     }
 
-    public static <K, C, R> CollectionVirtualTableAdapter<R> createSinglePartitionedValueFiltered(
-            String keySpaceName,
-            String rawTableName,
-            String description,
-            RowWalker<R> walker,
-            Map<K, C> map,
-            Predicate<C> mapValueFilter,
-            BiFunction<K, C, R> rowConverter)
+    public static <K, C, R> CollectionVirtualTableAdapter<R> createSinglePartitionedValueFiltered(String keySpaceName,
+                                                                                                  String rawTableName,
+                                                                                                  String description,
+                                                                                                  RowWalker<R> walker,
+                                                                                                  Map<K, C> metricsMap,
+                                                                                                  Predicate<C> mapValueFilter,
+                                                                                                  BiFunction<K, C, R> rowConverter)
     {
-        return createSinglePartitioned(keySpaceName, rawTableName, description, walker, map, key -> true,
-                mapValueFilter, rowConverter);
+        return createSinglePartitioned(keySpaceName, rawTableName, description, walker, metricsMap, key -> true,
+                                       mapValueFilter, rowConverter);
     }
 
-    private static <K, C, R> CollectionVirtualTableAdapter<R> createSinglePartitioned(
-            String keySpaceName,
-            String rawTableName,
-            String description,
-            RowWalker<R> walker,
-            Map<K, C> map,
-            Predicate<K> mapKeyFilter,
-            Predicate<C> mapValueFilter,
-            BiFunction<K, C, R> rowConverter)
+    private static <K, C, R> CollectionVirtualTableAdapter<R> createSinglePartitioned(String keySpaceName,
+                                                                                      String rawTableName,
+                                                                                      String description,
+                                                                                      RowWalker<R> walker,
+                                                                                      Map<K, C> metricsMap,
+                                                                                      Predicate<K> mapKeyFilter,
+                                                                                      Predicate<C> mapValueFilter,
+                                                                                      BiFunction<K, C, R> rowConverter)
     {
         assert walker.count(Column.Type.PARTITION_KEY) == 1 : "Partition key must be a single column";
         assert walker.count(Column.Type.CLUSTERING) == 0 : "Clustering columns are not supported";
@@ -213,25 +212,25 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
         });
 
         return new CollectionVirtualTableAdapter<>(keySpaceName,
-                virtualTableNameStyle(rawTableName),
-                description,
-                walker,
-                () -> map.entrySet()
-                        .stream()
-                        .filter(e -> mapKeyFilter.test(e.getKey()))
-                        .filter(e -> mapValueFilter.test(e.getValue()))
-                        .map(e -> rowConverter.apply(e.getKey(), e.getValue()))
-                        .iterator(),
-                decoratedKey ->
-                {
-                    K partitionKey = compose(converters.get(partitionKeyClass.get()), decoratedKey.getKey());
-                    boolean keyRequired = mapKeyFilter.test(partitionKey);
-                    if (!keyRequired)
-                        return null;
+                                                   virtualTableNameStyle(rawTableName),
+                                                   description,
+                                                   walker,
+                                                   () -> metricsMap.entrySet()
+                                                                   .stream()
+                                                                   .filter(e -> mapKeyFilter.test(e.getKey()))
+                                                                   .filter(e -> mapValueFilter.test(e.getValue()))
+                                                                   .map(e -> rowConverter.apply(e.getKey(), e.getValue()))
+                                                                   .iterator(),
+                                                   decoratedKey ->
+                                                   {
+                                                       K partitionKey = compose(converters.get(partitionKeyClass.get()), decoratedKey.getKey());
+                                                       boolean keyRequired = mapKeyFilter.test(partitionKey);
+                                                       if (!keyRequired)
+                                                           return null;
 
-                    C value = map.get(partitionKey);
-                    return mapValueFilter.test(value) ? rowConverter.apply(partitionKey, value) : null;
-                });
+                                                       C value = metricsMap.get(partitionKey);
+                                                       return mapValueFilter.test(value) ? rowConverter.apply(partitionKey, value) : null;
+                                                   });
     }
 
     public static String virtualTableNameStyle(String camel)
@@ -240,9 +239,9 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
         // For example: "ClientRequest.Write-EACH_QUORUM" will be converted to "client_request_write_each_quorum".
         String[] subNames = ONLY_ALPHABET_PATTERN.matcher(camel).replaceAll(".").split("\\.");
         return Arrays.stream(subNames)
-                .map(CollectionVirtualTableAdapter::camelToSnakeWithAbbreviations)
-                .reduce((a, b) -> a + '_' + b)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid table name: " + camel));
+                     .map(CollectionVirtualTableAdapter::camelToSnakeWithAbbreviations)
+                     .reduce((a, b) -> a + '_' + b)
+                     .orElseThrow(() -> new IllegalArgumentException("Invalid table name: " + camel));
     }
 
     private static String camelToSnakeWithAbbreviations(String camel)
@@ -263,33 +262,32 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
     private TableMetadata buildMetadata(String keyspaceName, String tableName, String description, RowWalker<R> walker)
     {
         TableMetadata.Builder builder = TableMetadata.builder(keyspaceName, tableName)
-                .comment(description)
-                .kind(TableMetadata.Kind.VIRTUAL);
+                                                     .comment(description)
+                                                     .kind(TableMetadata.Kind.VIRTUAL);
 
         List<AbstractType<?>> partitionKeyTypes = new ArrayList<>(walker.count(Column.Type.PARTITION_KEY));
-        walker.visitMeta(
-                new RowWalker.MetadataVisitor()
+        walker.visitMeta(new RowWalker.MetadataVisitor()
+        {
+            @Override
+            public <T> void accept(Column.Type type, String columnName, Class<T> clazz)
+            {
+                switch (type)
                 {
-                    @Override
-                    public <T> void accept(Column.Type type, String columnName, Class<T> clazz)
-                    {
-                        switch (type)
-                        {
-                            case PARTITION_KEY:
-                                partitionKeyTypes.add(converters.get(clazz));
-                                builder.addPartitionKeyColumn(columnName, converters.get(clazz));
-                                break;
-                            case CLUSTERING:
-                                builder.addClusteringColumn(columnName, converters.get(clazz));
-                                break;
-                            case REGULAR:
-                                builder.addRegularColumn(columnName, converters.get(clazz));
-                                break;
-                            default:
-                                throw new IllegalStateException("Unknown column type: " + type);
-                        }
-                    }
-                });
+                    case PARTITION_KEY:
+                        partitionKeyTypes.add(converters.get(clazz));
+                        builder.addPartitionKeyColumn(columnName, converters.get(clazz));
+                        break;
+                    case CLUSTERING:
+                        builder.addClusteringColumn(columnName, converters.get(clazz));
+                        break;
+                    case REGULAR:
+                        builder.addRegularColumn(columnName, converters.get(clazz));
+                        break;
+                    default:
+                        throw new IllegalStateException("Unknown column type: " + type);
+                }
+            }
+        });
 
         if (partitionKeyTypes.size() == 1)
             builder.partitioner(new LocalPartitioner(partitionKeyTypes.get(0)));
@@ -299,7 +297,6 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
         return builder.build();
     }
 
-    /** {@inheritDoc} */
     @Override
     public UnfilteredPartitionIterator select(DecoratedKey partitionKey, ClusteringIndexFilter clusteringFilter, ColumnFilter columnFilter)
     {
@@ -314,11 +311,10 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
             // then the parallel stream is slightly faster to get the first result, but for continuous reads it gives us
             // a higher GC pressure. The sequential stream is slightly slower to get the first result, but it has the
             // same throughput as the parallel stream, and it gives us less GC pressure.
-            // See the details in the benchmark: https://gist.github.com/Mmuzaf/80c73b7f9441ff21f6d22efe5746541a
             stream = StreamSupport.stream(data.spliterator(), false)
-                    .map(row -> makeRow(row, columnFilter))
-                    .filter(cr -> partitionKey.equals(cr.key.get()))
-                    .filter(cr -> clusteringFilter.selects(cr.clustering));
+                                  .map(row -> makeRow(row, columnFilter))
+                                  .filter(cr -> partitionKey.equals(cr.key.get()))
+                                  .filter(cr -> clusteringFilter.selects(cr.clustering));
         }
         else
         {
@@ -336,12 +332,11 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
             stream.forEach(cr -> rows.put(cr.clustering, cr.rowSup.get()));
 
         return new SingletonUnfilteredPartitionIterator(new DataRowUnfilteredIterator(partitionKey,
-                clusteringFilter,
-                columnFilter,
-                rows));
+                                                                                      clusteringFilter,
+                                                                                      columnFilter,
+                                                                                      rows));
     }
 
-    /** {@inheritDoc} */
     @Override
     public UnfilteredPartitionIterator select(DataRange dataRange, ColumnFilter columnFilter)
     {
@@ -359,17 +354,17 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
             {
                 NavigableMap<DecoratedKey, NavigableMap<Clustering<?>, Row>> partitionMap = new ConcurrentSkipListMap<>(DecoratedKey.comparator);
                 StreamSupport.stream(data.spliterator(), true)
-                        .map(row -> makeRow(row, columnFilter))
-                        .filter(cr -> dataRange.keyRange().contains(cr.key.get()))
-                        .forEach(cr -> partitionMap.computeIfAbsent(cr.key.get(), key -> new TreeMap<>(metadata.comparator))
-                                .put(cr.clustering, cr.rowSup.get()));
+                             .map(row -> makeRow(row, columnFilter))
+                             .filter(cr -> dataRange.keyRange().contains(cr.key.get()))
+                             .forEach(cr -> partitionMap.computeIfAbsent(cr.key.get(), key -> new TreeMap<>(metadata.comparator))
+                                                        .put(cr.clustering, cr.rowSup.get()));
                 return partitionMap.entrySet()
-                        .stream()
-                        .map(entry -> new DataRowUnfilteredIterator(entry.getKey(),
-                                dataRange.clusteringIndexFilter(entry.getKey()),
-                                columnFilter,
-                                entry.getValue()))
-                        .iterator();
+                                   .stream()
+                                   .map(entry -> new DataRowUnfilteredIterator(entry.getKey(),
+                                                                               dataRange.clusteringIndexFilter(entry.getKey()),
+                                                                               columnFilter,
+                                                                               entry.getValue()))
+                                   .iterator();
             }
         });
     }
@@ -384,12 +379,12 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
                                          NavigableMap<Clustering<?>, Row> data)
         {
             super(CollectionVirtualTableAdapter.this.metadata,
-                    partitionKey,
-                    DeletionTime.LIVE,
-                    columnFilter.queriedColumns(),
-                    Rows.EMPTY_STATIC_ROW,
-                    indexFilter.isReversed(),
-                    EncodingStats.NO_STATS);
+                  partitionKey,
+                  DeletionTime.LIVE,
+                  columnFilter.queriedColumns(),
+                  Rows.EMPTY_STATIC_ROW,
+                  indexFilter.isReversed(),
+                  EncodingStats.NO_STATS);
             this.rows = indexFilter.isReversed() ? data.descendingMap().values().iterator() : data.values().iterator();
         }
 
@@ -403,9 +398,9 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
     private CollectionRow makeRow(R row, ColumnFilter columnFilter)
     {
         assert metadata.partitionKeyColumns().size() == walker.count(Column.Type.PARTITION_KEY) :
-                "Invalid number of partition key columns";
+        "Invalid number of partition key columns";
         assert metadata.clusteringColumns().size() == walker.count(Column.Type.CLUSTERING) :
-                "Invalid number of clustering columns";
+        "Invalid number of clustering columns";
 
         Map<Column.Type, Object[]> fiterable = new EnumMap<>(Column.Type.class);
         fiterable.put(Column.Type.PARTITION_KEY, new Object[metadata.partitionKeyColumns().size()]);
@@ -416,7 +411,8 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
 
         walker.visitRow(row, new RowWalker.RowMetadataVisitor()
         {
-            private int pIdx, cIdx = 0;
+            private int pIdx = 0;
+            private int cIdx = 0;
 
             @Override
             public <T> void accept(Column.Type type, String columnName, Class<T> clazz, Supplier<T> value)
@@ -448,19 +444,19 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
         });
 
         return new CollectionRow(() -> makeRowKey(metadata, fiterable.get(Column.Type.PARTITION_KEY)),
-                makeRowClustering(metadata, fiterable.get(Column.Type.CLUSTERING)),
-                clustering ->
-                {
-                    Row.Builder rowBuilder = BTreeRow.unsortedBuilder();
-                    rowBuilder.newRow(clustering);
-                    cells.forEach((column, value) ->  {
-                        Object valueObj = value.get();
-                        if (valueObj == null)
-                            return;
-                        rowBuilder.addCell(BufferCell.live(column, NO_DELETION_TIME, decompose(column.type, valueObj)));
-                    });
-                    return rowBuilder.build();
-                });
+                                 makeRowClustering(metadata, fiterable.get(Column.Type.CLUSTERING)),
+                                 clustering ->
+                                 {
+                                     Row.Builder rowBuilder = BTreeRow.unsortedBuilder();
+                                     rowBuilder.newRow(clustering);
+                                     cells.forEach((column, value) -> {
+                                         Object valueObj = value.get();
+                                         if (valueObj == null)
+                                             return;
+                                         rowBuilder.addCell(BufferCell.live(column, NO_DELETION_TIME, decompose(column.type, valueObj)));
+                                     });
+                                     return rowBuilder.build();
+                                 });
     }
 
     private static class CollectionRow
@@ -506,23 +502,22 @@ public class CollectionVirtualTableAdapter<R> implements VirtualTable
     }
 
     /**
-     * @param table the table metadata
+     * @param table              the table metadata
      * @param partitionKeyValues the partition key values
      * @return the decorated key
      */
-    private static DecoratedKey makeRowKey(TableMetadata table, Object...partitionKeyValues)
+    private static DecoratedKey makeRowKey(TableMetadata table, Object... partitionKeyValues)
     {
         ByteBuffer key;
         if (partitionKeyValues.length > 1)
-            key = ((CompositeType)table.partitionKeyType).decompose(partitionKeyValues);
+            key = ((CompositeType) table.partitionKeyType).decompose(partitionKeyValues);
         else
             key = decompose(table.partitionKeyType, partitionKeyValues[0]);
         return table.partitioner.decorateKey(key);
     }
 
-    private static UnfilteredPartitionIterator createPartitionIterator(
-            TableMetadata metadata,
-            Iterator<UnfilteredRowIterator> partitions)
+    private static UnfilteredPartitionIterator createPartitionIterator(TableMetadata metadata,
+                                                                       Iterator<UnfilteredRowIterator> partitions)
     {
         return new AbstractUnfilteredPartitionIterator()
         {

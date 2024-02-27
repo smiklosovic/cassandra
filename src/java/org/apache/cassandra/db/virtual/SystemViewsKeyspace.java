@@ -39,11 +39,11 @@ public final class SystemViewsKeyspace extends VirtualKeyspace
                     .add(new SSTableTasksTable(VIRTUAL_VIEWS))
                     // Fully backward/forward compatible with the legace ThreadPoolsTable under the same "system_views.thread_pools" name.
                     .add(CollectionVirtualTableAdapter.create(VIRTUAL_VIEWS,
-                            "thread_pools",
-                            "Thread pool metrics for all thread pools",
-                            new ThreadPoolRowWalker(),
-                            Metrics.allThreadPoolMetrics(),
-                            ThreadPoolRow::new))
+                                                              "thread_pools",
+                                                              "Thread pool metrics for all thread pools",
+                                                              new ThreadPoolRowWalker(),
+                                                              Metrics.allThreadPoolMetrics(),
+                                                              ThreadPoolRow::new))
                     .add(new InternodeOutboundTable(VIRTUAL_VIEWS))
                     .add(new InternodeInboundTable(VIRTUAL_VIEWS))
                     .add(new PendingHintsTable(VIRTUAL_VIEWS))

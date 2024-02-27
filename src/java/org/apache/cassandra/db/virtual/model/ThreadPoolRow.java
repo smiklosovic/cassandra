@@ -21,7 +21,6 @@ package org.apache.cassandra.db.virtual.model;
 import org.apache.cassandra.db.virtual.proc.Column;
 import org.apache.cassandra.metrics.ThreadPoolMetrics;
 
-
 /**
  * Thread pool metrics representation for a {@link org.apache.cassandra.db.virtual.CollectionVirtualTableAdapter}.
  */

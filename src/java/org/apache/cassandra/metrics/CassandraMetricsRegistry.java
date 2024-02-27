@@ -74,6 +74,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.Optional.ofNullable;
+import static org.apache.cassandra.db.virtual.CollectionVirtualTableAdapter.createSinglePartitionedKeyFiltered;
+import static org.apache.cassandra.db.virtual.CollectionVirtualTableAdapter.createSinglePartitionedValueFiltered;
 import static org.apache.cassandra.schema.SchemaConstants.VIRTUAL_METRICS;
 
 /**
@@ -200,13 +202,13 @@ public class CassandraMetricsRegistry extends MetricRegistry
             // This is a very efficient way to filter metrics by group name, so make sure that metrics group name
             // and metric type following the same order as it constructed in MetricName class.
             final String groupPrefix = DefaultNameFactory.GROUP_NAME + '.' + groupName + '.';
-            builder.add(CollectionVirtualTableAdapter.createSinglePartitionedKeyFiltered(VIRTUAL_METRICS,
-                    METRICS_GROUP_POSTFIX.apply(groupName),
-                    "All metrics for \"" + groupName + "\" metric group",
-                    new MetricRowWalker(),
-                    Metrics.getMetrics(),
-                    key -> key.startsWith(groupPrefix),
-                    MetricRow::new));
+            builder.add(createSinglePartitionedKeyFiltered(VIRTUAL_METRICS,
+                                                           METRICS_GROUP_POSTFIX.apply(groupName),
+                                                           "All metrics for \"" + groupName + "\" metric group",
+                                                           new MetricRowWalker(),
+                                                           Metrics.getMetrics(),
+                                                           key -> key.startsWith(groupPrefix),
+                                                           MetricRow::new));
         });
         // Register virtual table of all known metric groups.
         builder.add(CollectionVirtualTableAdapter.create(VIRTUAL_METRICS,
@@ -217,41 +219,41 @@ public class CassandraMetricsRegistry extends MetricRegistry
                         MetricGroupRow::new))
                 // Register virtual tables of all metrics types similar to the JMX MBean structure,
                 // e.g.: HistogramJmxMBean, MeterJmxMBean, etc.
-                .add(CollectionVirtualTableAdapter.createSinglePartitionedValueFiltered(VIRTUAL_METRICS,
-                        "type_counter",
-                        "All metrics with type \"Counter\"",
-                        new CounterMetricRowWalker(),
-                        Metrics.getMetrics(),
-                        value -> value instanceof Counter,
-                        CounterMetricRow::new))
-                .add(CollectionVirtualTableAdapter.createSinglePartitionedValueFiltered(VIRTUAL_METRICS,
-                        "type_gauge",
-                        "All metrics with type \"Gauge\"",
-                        new GaugeMetricRowWalker(),
-                        Metrics.getMetrics(),
-                        value -> value instanceof Gauge,
-                        GaugeMetricRow::new))
-                .add(CollectionVirtualTableAdapter.createSinglePartitionedValueFiltered(VIRTUAL_METRICS,
-                        "type_histogram",
-                        "All metrics with type \"Histogram\"",
-                        new HistogramMetricRowWalker(),
-                        Metrics.getMetrics(),
-                        value -> value instanceof Histogram,
-                        HistogramMetricRow::new))
-                .add(CollectionVirtualTableAdapter.createSinglePartitionedValueFiltered(VIRTUAL_METRICS,
-                        "type_meter",
-                        "All metrics with type \"Meter\"",
-                        new MeterMetricRowWalker(),
-                        Metrics.getMetrics(),
-                        value -> value instanceof Meter,
-                        MeterMetricRow::new))
-                .add(CollectionVirtualTableAdapter.createSinglePartitionedValueFiltered(VIRTUAL_METRICS,
-                        "type_timer",
-                        "All metrics with type \"Timer\"",
-                        new TimerMetricRowWalker(),
-                        Metrics.getMetrics(),
-                        value -> value instanceof Timer,
-                        TimerMetricRow::new));
+                .add(createSinglePartitionedValueFiltered(VIRTUAL_METRICS,
+                                                          "type_counter",
+                                                          "All metrics with type \"Counter\"",
+                                                          new CounterMetricRowWalker(),
+                                                          Metrics.getMetrics(),
+                                                          Counter.class::isInstance,
+                                                          CounterMetricRow::new))
+                .add(createSinglePartitionedValueFiltered(VIRTUAL_METRICS,
+                                                          "type_gauge",
+                                                          "All metrics with type \"Gauge\"",
+                                                          new GaugeMetricRowWalker(),
+                                                          Metrics.getMetrics(),
+                                                          Gauge.class::isInstance,
+                                                          GaugeMetricRow::new))
+                .add(createSinglePartitionedValueFiltered(VIRTUAL_METRICS,
+                                                          "type_histogram",
+                                                          "All metrics with type \"Histogram\"",
+                                                          new HistogramMetricRowWalker(),
+                                                          Metrics.getMetrics(),
+                                                          Histogram.class::isInstance,
+                                                          HistogramMetricRow::new))
+                .add(createSinglePartitionedValueFiltered(VIRTUAL_METRICS,
+                                                          "type_meter",
+                                                          "All metrics with type \"Meter\"",
+                                                          new MeterMetricRowWalker(),
+                                                          Metrics.getMetrics(),
+                                                          Meter.class::isInstance,
+                                                          MeterMetricRow::new))
+                .add(createSinglePartitionedValueFiltered(VIRTUAL_METRICS,
+                                                          "type_timer",
+                                                          "All metrics with type \"Timer\"",
+                                                          new TimerMetricRowWalker(),
+                                                          Metrics.getMetrics(),
+                                                          Timer.class::isInstance,
+                                                          TimerMetricRow::new));
         return builder.build();
     }
 

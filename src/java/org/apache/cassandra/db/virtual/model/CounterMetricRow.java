@@ -24,7 +24,6 @@ import org.apache.cassandra.db.virtual.proc.Column;
 
 import static org.apache.cassandra.metrics.CassandraMetricsRegistry.Metrics;
 
-
 /**
  * Counter metric representation for a {@link org.apache.cassandra.db.virtual.CollectionVirtualTableAdapter}.
  */
@@ -35,6 +34,7 @@ public class CounterMetricRow
 
     public CounterMetricRow(String key, Metric value)
     {
+        assert value instanceof Counter : "expected type of value should be Counter";
         this.key = key;
         this.value = (Counter) value;
     }
