@@ -20,6 +20,8 @@ package org.apache.cassandra.audit;
 import java.net.InetAddress;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 
@@ -27,6 +29,9 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.Session;
@@ -344,10 +349,11 @@ public class AuditLoggerAuthTest
                        TEST_PW_HASH);
     }
 
+    private static final Logger logger = LoggerFactory.getLogger(AuditLoggerAuthTest.class);
+
     /**
      * Helper methods
      */
-
     private static void executeWithCredentials(List<String> queries, String username, String password,
                                                AuditLogEntryType expectedType)
     {
@@ -365,20 +371,42 @@ public class AuditLoggerAuthTest
             catch (AuthenticationException e)
             {
                 authFailed = true;
+
+                if (expectedType == AuditLogEntryType.LOGIN_SUCCESS)
+                {
+                    throw new RuntimeException(e);
+                }
             }
             catch (UnauthorizedException ue)
             {
                 //no-op, taken care by caller
+                if (expectedType == AuditLogEntryType.LOGIN_SUCCESS)
+                {
+                    throw new RuntimeException(ue);
+                }
             }
             catch (SyntaxError se)
             {
                 // no-op, taken care of by caller
+                if (expectedType == AuditLogEntryType.LOGIN_SUCCESS)
+                {
+                    throw new RuntimeException(se);
+                }
             }
         }
 
         if (expectedType != null)
         {
             assertTrue(getInMemAuditLogger().size() > 0);
+
+            List<String> list = new LinkedList<>();
+            Iterator<AuditLogEntry> it = getInMemAuditLogger().iterator();
+            while(it.hasNext()){
+                list.add(it.next().getLogString());
+            }
+
+            logger.info("printing queue as list " + list);
+
             AuditLogEntry logEntry = getInMemAuditLogger().poll();
 
             assertEquals(expectedType, logEntry.getType());
