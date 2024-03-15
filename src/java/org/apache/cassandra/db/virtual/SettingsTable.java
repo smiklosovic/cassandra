@@ -17,9 +17,12 @@
  */
 package org.apache.cassandra.db.virtual;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 
 import org.apache.cassandra.config.Config;
@@ -70,7 +73,7 @@ final class SettingsTable extends AbstractVirtualTable
         if (BACKWARDS_COMPATABLE_NAMES.containsKey(name))
             ClientWarn.instance.warn("key '" + name + "' is deprecated; should switch to '" + BACKWARDS_COMPATABLE_NAMES.get(name) + "'");
         if (PROPERTIES.containsKey(name))
-            result.row(name).column(VALUE, getValue(PROPERTIES.get(name)));
+            result.row(name).column(VALUE, getValue(config, PROPERTIES.get(name)));
         return result;
     }
 
@@ -79,14 +82,21 @@ final class SettingsTable extends AbstractVirtualTable
     {
         SimpleDataSet result = new SimpleDataSet(metadata());
         for (Map.Entry<String, Property> e : PROPERTIES.entrySet())
-            result.row(e.getKey()).column(VALUE, getValue(e.getValue()));
+            result.row(e.getKey()).column(VALUE, getValue(config, e.getValue()));
         return result;
     }
 
-    private String getValue(Property prop)
+    @VisibleForTesting
+    static String getValue(Config config, Property prop)
     {
         Object value = prop.get(config);
-        return value == null ? null : value.toString();
+        if (value == null)
+            return null;
+
+        if (value.getClass().isArray())
+            return Arrays.asList((Object[]) value).toString();
+
+        return value.toString();
     }
 
     private static Map<String, Property> getProperties()

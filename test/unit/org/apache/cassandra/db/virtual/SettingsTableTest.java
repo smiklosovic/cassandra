@@ -74,7 +74,7 @@ public class SettingsTableTest extends CQLTester
             String name = r.getString("name");
             Property prop = SettingsTable.PROPERTIES.get(name);
             if (prop != null) // skip overrides
-                Assert.assertEquals(getValue(prop), r.getString("value"));
+                Assert.assertEquals(SettingsTable.getValue(config, prop), r.getString("value"));
         }
         Assert.assertTrue(SettingsTable.PROPERTIES.size() <= i);
     }
@@ -87,7 +87,7 @@ public class SettingsTableTest extends CQLTester
             String name = e.getKey();
             Property prop = e.getValue();
             String q = "SELECT * FROM vts.settings WHERE name = '"+name+'\'';
-            assertRowsNet(executeNet(q), new Object[] { name, getValue(prop) });
+            assertRowsNet(executeNet(q), new Object[] { name, SettingsTable.getValue(config, prop) });
         }
     }
 
@@ -139,14 +139,6 @@ public class SettingsTableTest extends CQLTester
         assertRowsNet(executeNet(q), new Object[] {"credentials_update_interval", null});
         q = "SELECT * FROM vts.settings WHERE name = 'credentials_update_interval_in_ms';";
         assertRowsNet(executeNet(q), new Object[] {"credentials_update_interval_in_ms", "-1"});
-    }
-
-    private String getValue(Property prop)
-    {
-        Object v = prop.get(config);
-        if (v != null)
-            return v.toString();
-        return null;
     }
 
     private void check(String setting, String expected) throws Throwable
