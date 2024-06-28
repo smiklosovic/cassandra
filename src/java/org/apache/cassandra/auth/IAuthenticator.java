@@ -18,6 +18,7 @@
 package org.apache.cassandra.auth;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.security.cert.Certificate;
 import java.util.Collections;
 import java.util.Map;
@@ -180,6 +181,21 @@ public interface IAuthenticator
          * @throws AuthenticationException
          */
         public AuthenticatedUser getAuthenticatedUser() throws AuthenticationException;
+
+        /**
+         * Following a sucessful negotiation, get the AuthenticatedUser representing the logged in subject.
+         * This method should only be called if {@link #isComplete()} returns true.
+         * Should never return null - always throw AuthenticationException instead.
+         * Returning AuthenticatedUser.ANONYMOUS_USER is an option if authentication is not required.
+         *
+         * @param address client address
+         * @return non-null representation of the authenticated subject
+         * @throws AuthenticationException
+         */
+        default public AuthenticatedUser getAuthenticatedUser(InetSocketAddress address) throws AuthenticationException
+        {
+            return getAuthenticatedUser();
+        }
 
         /**
          * Whether it is determined that an AUTHENTICATE message should be sent to properly negotiate.

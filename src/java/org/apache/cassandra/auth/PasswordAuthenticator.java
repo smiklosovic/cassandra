@@ -18,6 +18,7 @@
 package org.apache.cassandra.auth;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
@@ -139,7 +140,7 @@ public class PasswordAuthenticator implements IAuthenticator, AuthCache.BulkLoad
         return QueryProcessor.process(query, cl);
     }
 
-    private AuthenticatedUser authenticate(String username, String password) throws AuthenticationException
+    private AuthenticatedUser authenticate(InetSocketAddress address, String username, String password) throws AuthenticationException
     {
         String hash = cache.get(username);
 
@@ -163,8 +164,18 @@ public class PasswordAuthenticator implements IAuthenticator, AuthCache.BulkLoad
             throw new AuthenticationException(String.format("Provided username %s and/or password are incorrect", username));
         }
 
+        if (address != null)
+        {
+            // if address is blocked
+
+            // throw new AuthenticationException("This IP was blocked from logging in");
+        }
+
         if (!checkpw(password, hash))
+        {
+            // if rate limiter is on full capacity, block address
             throw new AuthenticationException(String.format("Provided username %s and/or password are incorrect", username));
+        }
 
         return new AuthenticatedUser(username, AuthenticationMode.PASSWORD);
     }
@@ -274,7 +285,15 @@ public class PasswordAuthenticator implements IAuthenticator, AuthCache.BulkLoad
         {
             if (!complete)
                 throw new AuthenticationException("SASL negotiation not complete");
-            return authenticate(username, password);
+            return authenticate(null, username, password);
+        }
+
+        @Override
+        public AuthenticatedUser getAuthenticatedUser(InetSocketAddress address) throws AuthenticationException
+        {
+            if (!complete)
+                throw new AuthenticationException("SASL negotiation not complete");
+            return authenticate(address, username, password);
         }
 
         @Override
