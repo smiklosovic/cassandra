@@ -2303,6 +2303,11 @@ public class NodeProbe implements AutoCloseable
         desProxy.disableDiagnosticLog();
     }
 
+    public boolean isDiagnosticLogEnabled()
+    {
+        return desProxy.isDiagnosticLogEnabled();
+    }
+
     public void enableAuditLog(String loggerName, Map<String, String> parameters, String includedKeyspaces, String excludedKeyspaces,
                                String includedCategories, String excludedCategories, String includedUsers, String excludedUsers)
     {

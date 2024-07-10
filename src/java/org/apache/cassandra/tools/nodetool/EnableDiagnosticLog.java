@@ -62,20 +62,9 @@ public class EnableDiagnosticLog extends NodeTool.NodeToolCmd
                 bblocking = Boolean.parseBoolean(blocking);
         }
 
-        try
-        {
+        if (!probe.isDiagnosticLogEnabled())
             probe.enableDiagnosticLog(logger, Collections.emptyMap(), archiveRetries, bblocking, rollCycle, maxLogSize, maxQueueWeight, archiveCommand);
-        }
-        catch (IllegalStateException ex)
-        {
-            if (ex.getMessage().contains("Already logging to"))
-            {
-                probe.output().err.println("Diagnostic logging is already enabled. Disable it first to enable it again.");
-            }
-            else
-            {
-                throw ex;
-            }
-        }
+        else
+            probe.output().err.println("Diagnostic logging is already enabled. Disable it first to enable it again.");
     }
 }

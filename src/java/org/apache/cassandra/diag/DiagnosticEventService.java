@@ -58,7 +58,7 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
 
     private static final DiagnosticEventService instance = new DiagnosticEventService();
 
-    private boolean initialized = false;
+    private volatile boolean initialized = false;
 
     private DiagnosticEventService()
     {

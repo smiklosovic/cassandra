@@ -29,7 +29,7 @@ import javax.management.openmbean.CompositeData;
  */
 public interface DiagnosticEventServiceMBean
 {
-    final String MBEAN_NAME = "org.apache.cassandra.diag:type=DiagnosticEventService";
+    String MBEAN_NAME = "org.apache.cassandra.diag:type=DiagnosticEventService";
 
     /*
      * Indicates if any events will be published.

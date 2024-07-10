@@ -166,7 +166,7 @@ batchlog_replay_throttle: 1024KiB
 #   Please increase system_auth keyspace replication factor if you use this authenticator.
 #   If using PasswordAuthenticator, CassandraRoleManager must also be used (see below)
 authenticator:
-  class_name : org.apache.cassandra.auth.AllowAllAuthenticator
+  class_name : org.apache.cassandra.auth.PasswordAuthenticator
 # MutualTlsAuthenticator can be configured using the following configuration. One can add their own validator
 # which implements MutualTlsCertificateValidator class and provide logic for extracting identity out of certificates
 # and validating certificates.
@@ -181,7 +181,7 @@ authenticator:
 # - AllowAllAuthorizer allows any action to any user - set it to disable authorization.
 # - CassandraAuthorizer stores permissions in system_auth.role_permissions table. Please
 #   increase system_auth keyspace replication factor if you use this authorizer.
-authorizer: AllowAllAuthorizer
+authorizer: CassandraAuthorizer
 
 # Part of the Authentication & Authorization backend, implementing IRoleManager; used
 # to maintain grants and memberships between roles.
@@ -1866,18 +1866,18 @@ audit_logging_options:
 # Diagnostic Events #
 # If enabled, diagnostic events can be helpful for troubleshooting operational issues. Emitted events contain details
 # on internal state and temporal relationships across events, accessible by clients via JMX.
-diagnostic_events_enabled: false
+diagnostic_events_enabled: true
 
 diagnostic_logging_options:
-    enabled: false
+    enabled: true
     logger:
       - class_name: BinDiagnosticLogger
-    # diagnostic_log_dir:
+    diagnostic_log_dir: /tmp/diagnostics
     # roll_cycle: HOURLY
     # block: true
     # max_queue_weight: 268435456 # 256 MiB
     # max_log_size: 17179869184 # 16 GiB
-    ## archive command is "/path/to/script.sh %path" where %path is replaced with the file being rolled:
+    ## archive command is "/path/to/script.sh %path" where %path is re/bplaced with the file being rolled:
     # archive_command:
     # max_archive_retries: 10
 
@@ -2167,55 +2167,55 @@ drop_compact_storage_enabled: false
 # Password is invalid if all characters are from non-supported character set. If a password is otherwise valid,
 # but it contains characters from unsupported language, these characters contribute only to password length rule.
 # All digits and all following special characters are supported too: !"#$%&()*+,-./:;<=>?@[\]^_`{|}~
-#password_validator:
-#  # Implementation class of a validator. When not in form of FQCN, the
-#  # package name org.apache.cassandra.db.guardrails.validators is prepended.
-#  # By default, there is no validator.
-#  class_name: CassandraPasswordValidator
-#  # Implementation class of related generator which generates values which are valid when
-#  # tested against this validator. When not in form of FQCN, the
-#  # package name org.apache.cassandra.db.guardrails.generators is prepended.
-#  # By default, there is no generator.
-#  generator_class_name: CassandraPasswordGenerator
-#  # There are four characteristics:
-#  # upper-case, lower-case, special character and digit.
-#  # If this value is set e.g. to 3, a password has to consist of 3 out of 4 characteristics.
-#  # For example, it has to contain at least 2 upper-case characters, 2 lower-case, and 2 digits to pass,
-#  # but it does not have to contain any special characters.
-#  # If number of characteristics found in the password is less than or equal to this number, it will emit warning.
-#  characteristic_warn: 3
-#  # If number of characteristics found in the password is less than or equal to this number, it will emit failure.
-#  characteristic_fail: 2
-#  # Maximum length of a password. Defaults to 1000.
-#  max_length: 1000
-#  # If password is shorter than this value, the validator will emit a warning.
-#  length_warn: 12
-#  # If a password is shorter than this value, the validator will emit a failure.
-#  length_fail: 8
-#  # If a password does not contain at least n upper-case characters, the validator will emit a warning.
-#  upper_case_warn: 2
-#  # If a password does not contain at least n upper-case characters, the validator will emit a failure.
-#  upper_case_fail: 1
-#  # If a password does not contain at least n lower-case characters, the validator will emit a warning.
-#  lower_case_warn: 2
-#  # If a password does not contain at least n lower-case characters, the validator will emit a failure.
-#  lower_case_fail: 1
-#  # If a password does not contain at least n digits, the validator will emit a warning.
-#  digit_warn: 2
-#  # If a password does not contain at least n digits, the validator will emit a failure.
-#  digit_fail: 1
-#  # If a password does not contain at least n special characters, the validator will emit a warning.
-#  special_warn: 2
-#  # If a password does not contain at least n special characters, the validator will emit a failure.
-#  special_fail: 1
-#  # If a password contain illegal sequences that at least this long, it is invalid.
-#  # Illegal sequences might be either alphabetical (form 'abcde'),
-#  # numerical (form '34567'), or US qwerty (form 'asdfg') as well as sequencies from supported character sets.
-#  # The minimum value for this property is 3, by default it is set to 5.
-#  illegal_sequence_length: 5
-#  # If set to true, a user will be informed what policies a suggested password is missing in order to be valid.
-#  # Defaults to true.
-#  detailed_messages: true
+password_validator:
+  # Implementation class of a validator. When not in form of FQCN, the
+  # package name org.apache.cassandra.db.guardrails.validators is prepended.
+  # By default, there is no validator.
+  class_name: CassandraPasswordValidator
+  # Implementation class of related generator which generates values which are valid when
+  # tested against this validator. When not in form of FQCN, the
+  # package name org.apache.cassandra.db.guardrails.generators is prepended.
+  # By default, there is no generator.
+  generator_class_name: CassandraPasswordGenerator
+  # There are four characteristics:
+  # upper-case, lower-case, special character and digit.
+  # If this value is set e.g. to 3, a password has to consist of 3 out of 4 characteristics.
+  # For example, it has to contain at least 2 upper-case characters, 2 lower-case, and 2 digits to pass,
+  # but it does not have to contain any special characters.
+  # If number of characteristics found in the password is less than or equal to this number, it will emit warning.
+  characteristic_warn: 3
+  # If number of characteristics found in the password is less than or equal to this number, it will emit failure.
+  characteristic_fail: 2
+  # Maximum length of a password. Defaults to 1000.
+  max_length: 1000
+  # If password is shorter than this value, the validator will emit a warning.
+  length_warn: 12
+  # If a password is shorter than this value, the validator will emit a failure.
+  length_fail: 8
+  # If a password does not contain at least n upper-case characters, the validator will emit a warning.
+  upper_case_warn: 2
+  # If a password does not contain at least n upper-case characters, the validator will emit a failure.
+  upper_case_fail: 1
+  # If a password does not contain at least n lower-case characters, the validator will emit a warning.
+  lower_case_warn: 2
+  # If a password does not contain at least n lower-case characters, the validator will emit a failure.
+  lower_case_fail: 1
+  # If a password does not contain at least n digits, the validator will emit a warning.
+  digit_warn: 2
+  # If a password does not contain at least n digits, the validator will emit a failure.
+  digit_fail: 1
+  # If a password does not contain at least n special characters, the validator will emit a warning.
+  special_warn: 2
+  # If a password does not contain at least n special characters, the validator will emit a failure.
+  special_fail: 1
+  # If a password contain illegal sequences that at least this long, it is invalid.
+  # Illegal sequences might be either alphabetical (form 'abcde'),
+  # numerical (form '34567'), or US qwerty (form 'asdfg') as well as sequencies from supported character sets.
+  # The minimum value for this property is 3, by default it is set to 5.
+  illegal_sequence_length: 5
+  # If set to true, a user will be informed what policies a suggested password is missing in order to be valid.
+  # Defaults to true.
+  detailed_messages: true
 
 # If this is set to false, then it is not possible to call reconfiguration
 # method in GuardrailsMBean. It will effectively forbid the reconfiguration of password validator in runtime.

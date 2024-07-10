@@ -62,11 +62,9 @@ public final class DiagnosticEventPersistence
 
         inMemoryLogger = new InMemoryDiagnosticLogger();
         diagnosticLogOptions = DatabaseDescriptor.getDiagnosticLoggingOptions();
-        diagnosticLogger = getDiagnosticLogger(diagnosticLogOptions);
-        consumers = new HashSet<Consumer<DiagnosticEvent>>()
+        consumers = new HashSet<>()
         {{
             add(inMemoryLogger);
-            add(diagnosticLogger);
         }};
 
         initialized = true;
@@ -160,6 +158,32 @@ public final class DiagnosticEventPersistence
         }
         DiagnosticEventStore<Long> store = inMemoryLogger.getStore(cls);
 
+        return getEventsInternal(store, eventClazz, key, limit, includeKey);
+    }
+
+    public TreeMap<Long, Map<String, Serializable>> getAllEvents()
+    {
+        if (inMemoryLogger == null)
+            return new TreeMap<>();
+
+        TreeMap<Long, Map<String, Serializable>> allEvents = new TreeMap<>();
+
+        for (Map.Entry<Class, DiagnosticEventStore<Long>> entry : inMemoryLogger.stores.entrySet())
+        {
+            DiagnosticEventStore<Long> store = inMemoryLogger.getStore(entry.getKey());
+            SortedMap<Long, Map<String, Serializable>> events = getEventsInternal(store, entry.getKey().getName(), 0L, 0, false);
+            allEvents.putAll(events);
+        }
+
+        return allEvents;
+    }
+
+    private SortedMap<Long, Map<String, Serializable>> getEventsInternal(DiagnosticEventStore<Long> store,
+                                                                         String eventClazz,
+                                                                         Long key,
+                                                                         int limit,
+                                                                         boolean includeKey)
+    {
         NavigableMap<Long, DiagnosticEvent> events = store.scan(key, includeKey ? limit : limit + 1);
         if (!includeKey && !events.isEmpty()) events = events.tailMap(key, false);
         TreeMap<Long, Map<String, Serializable>> ret = new TreeMap<>();
