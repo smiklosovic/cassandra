@@ -19,6 +19,7 @@ package org.apache.cassandra.diag;
 
 import java.io.Serializable;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -307,6 +308,15 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
     public ImmutableSet<Class<? extends DiagnosticEvent>> getAllEventClassesWithSubscribers()
     {
         return subscribersByClass.keySet();
+    }
+
+    public Map<Class<?>, Set<Enum<?>>> getAllEventClassesWithTypes()
+    {
+        Map<Class<?>, Set<Enum<?>>> result = new HashMap<>();
+        for (Map.Entry<Class, ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>>> entry : subscribersByClassAndType.entrySet())
+            result.put(entry.getKey(), entry.getValue().keySet());
+
+        return result;
     }
 
     public static DiagnosticEventService instance()

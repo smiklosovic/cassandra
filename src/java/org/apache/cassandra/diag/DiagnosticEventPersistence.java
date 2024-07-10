@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.SortedMap;
@@ -170,8 +171,9 @@ public final class DiagnosticEventPersistence
 
         for (Map.Entry<Class, DiagnosticEventStore<Long>> entry : inMemoryLogger.stores.entrySet())
         {
-            DiagnosticEventStore<Long> store = inMemoryLogger.getStore(entry.getKey());
-            SortedMap<Long, Map<String, Serializable>> events = getEventsInternal(store, entry.getKey().getName(), 0L, 0, false);
+            DiagnosticEventStore<Long> store = entry.getValue();
+            SortedMap<Long, Map<String, Serializable>> events = getEventsInternal(store, entry.getKey().getName(), 0L, 0, true);
+            logger.info(events.toString());
             allEvents.putAll(events);
         }
 
@@ -207,6 +209,23 @@ public final class DiagnosticEventPersistence
         {
             logger.info("Enabling events: {}", eventClazz);
             DiagnosticEventService.instance().subscribe(getEventClass(eventClazz), consumers);
+        }
+        catch (ClassNotFoundException | InvalidClassException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public <T extends Enum<T>> void enableEventPersistence(String eventClazz, T type)
+    {
+        try
+        {
+            logger.info("Enabling events {} for type {}", eventClazz, type);
+            Iterator<Consumer<DiagnosticEvent>> consumerIterator = consumers.iterator();
+            while (consumerIterator.hasNext())
+            {
+                DiagnosticEventService.instance().subscribe(getEventClass(eventClazz), type, consumerIterator.next());
+            }
         }
         catch (ClassNotFoundException | InvalidClassException e)
         {

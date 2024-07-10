@@ -19,6 +19,7 @@
 package org.apache.cassandra.db.virtual;
 
 import java.io.Serializable;
+import java.util.Date;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -35,9 +36,9 @@ public class DiagnosticEventsTable extends AbstractVirtualTable
                            .comment("Diagnostic events")
                            .kind(TableMetadata.Kind.VIRTUAL)
                            .addPartitionKeyColumn("class", UTF8Type.instance)
-                           .addPartitionKeyColumn("type", UTF8Type.instance)
-                           .addPartitionKeyColumn("ts", TimestampType.instance)
-                           .addRegularColumn("thread", UTF8Type.instance)
+                           .addClusteringColumn("ts", TimestampType.instance)
+                           .addClusteringColumn("type", UTF8Type.instance)
+                           .addRegularColumn("value", UTF8Type.instance)
                            .build());
     }
 
@@ -54,12 +55,12 @@ public class DiagnosticEventsTable extends AbstractVirtualTable
         for (Map.Entry<Long, Map<String, Serializable>> entry : allEvents.entrySet())
         {
             Map<String, Serializable> event = entry.getValue();
-            String clazz = (String) event.get("class");
-            String type = (String) event.get("type");
-            Long timestamp = (Long) event.get("ts");
-            String thread = (String) event.get("thread");
+            String clazz = (String) event.remove("class");
+            String type = (String) event.remove("type");
+            Long timestamp = (Long) event.remove("ts");
+            event.remove("thread");
 
-            result.row(clazz, type, timestamp).column("thread", thread);
+            result.row(clazz, new Date(timestamp), type).column("value", event.toString());
         }
 
         return result;
