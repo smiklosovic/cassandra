@@ -57,7 +57,7 @@ public final class DiagnosticEventPersistence
 
     public synchronized void initialize()
     {
-        if (initialized)
+        if (initialized || !DatabaseDescriptor.diagnosticEventsEnabled())
             return;
 
         inMemoryLogger = new InMemoryDiagnosticLogger();

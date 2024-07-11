@@ -74,7 +74,7 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
     {
         // we can not initialize in static methods because DatabaseDescriptor
         // which is called in these below is not populated yet
-        if (!initialized)
+        if (!initialized && DatabaseDescriptor.diagnosticEventsEnabled())
         {
             DiagnosticEventPersistence.instance().initialize();
             initialized = true;
