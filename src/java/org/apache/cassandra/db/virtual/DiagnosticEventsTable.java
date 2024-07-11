@@ -21,7 +21,6 @@ package org.apache.cassandra.db.virtual;
 import java.io.Serializable;
 import java.util.Date;
 import java.util.Map;
-import java.util.TreeMap;
 
 import org.apache.cassandra.db.marshal.TimestampType;
 import org.apache.cassandra.db.marshal.UTF8Type;
@@ -36,7 +35,7 @@ public class DiagnosticEventsTable extends AbstractVirtualTable
                            .comment("Diagnostic events")
                            .kind(TableMetadata.Kind.VIRTUAL)
                            .addPartitionKeyColumn("class", UTF8Type.instance)
-                           .addClusteringColumn("ts", TimestampType.instance)
+                           .addClusteringColumn("timestamp", TimestampType.instance)
                            .addClusteringColumn("type", UTF8Type.instance)
                            .addRegularColumn("value", UTF8Type.instance)
                            .build());
@@ -50,14 +49,14 @@ public class DiagnosticEventsTable extends AbstractVirtualTable
         if (!DiagnosticEventPersistence.instance().isDiagnosticLogEnabled())
             return result;
 
-        TreeMap<Long, Map<String, Serializable>> allEvents = DiagnosticEventPersistence.instance().getAllEvents();
+        Map<Long, Map<String, Serializable>> allEvents = DiagnosticEventPersistence.instance().getAllEvents();
 
         for (Map.Entry<Long, Map<String, Serializable>> entry : allEvents.entrySet())
         {
             Map<String, Serializable> event = entry.getValue();
             String clazz = (String) event.remove("class");
             String type = (String) event.remove("type");
-            Long timestamp = (Long) event.remove("ts");
+            Long timestamp = (Long) event.remove("timestamp");
             event.remove("thread");
 
             result.row(clazz, new Date(timestamp), type).column("value", event.toString());

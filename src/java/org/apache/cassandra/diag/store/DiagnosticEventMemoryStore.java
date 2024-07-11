@@ -19,6 +19,7 @@
 package org.apache.cassandra.diag.store;
 
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -28,6 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.cassandra.diag.DiagnosticEvent;
+import org.apache.cassandra.diag.LastEventIdBroadcaster;
 
 /**
  * Simple on-heap memory store that allows to buffer and retrieve a fixed number of events.
@@ -80,6 +82,19 @@ public final class DiagnosticEventMemoryStore implements DiagnosticEventStore<Lo
     public Long getLastEventId()
     {
         return lastKey.get();
+    }
+
+    @Override
+    public void reset()
+    {
+        Iterator<DiagnosticEvent> iterator = events.values().iterator();
+        if (iterator.hasNext())
+        {
+            DiagnosticEvent event = iterator.next();
+            LastEventIdBroadcaster.instance().setLastEventId(event.getClass().getName(), 0);
+        }
+        lastKey.set(0);
+        events.clear();
     }
 
     @VisibleForTesting

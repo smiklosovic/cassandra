@@ -24,7 +24,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.SortedMap;
@@ -53,7 +52,7 @@ public final class DiagnosticEventPersistence
     private volatile InMemoryDiagnosticLogger inMemoryLogger;
     private volatile DiagnosticLogOptions diagnosticLogOptions;
     private volatile IDiagnosticLogger diagnosticLogger;
-    private volatile Collection<Consumer<DiagnosticEvent>> consumers;
+    private final Collection<Consumer<DiagnosticEvent>> consumers = new HashSet<>();
     private volatile boolean initialized = false;
 
     public synchronized void initialize()
@@ -63,10 +62,7 @@ public final class DiagnosticEventPersistence
 
         inMemoryLogger = new InMemoryDiagnosticLogger();
         diagnosticLogOptions = DatabaseDescriptor.getDiagnosticLoggingOptions();
-        consumers = new HashSet<>()
-        {{
-            add(inMemoryLogger);
-        }};
+        consumers.add(inMemoryLogger);
 
         initialized = true;
     }
@@ -92,6 +88,7 @@ public final class DiagnosticEventPersistence
         try
         {
             diagnosticLogger.stop();
+            inMemoryLogger.stop();
         }
         finally
         {
@@ -162,7 +159,7 @@ public final class DiagnosticEventPersistence
         return getEventsInternal(store, eventClazz, key, limit, includeKey);
     }
 
-    public TreeMap<Long, Map<String, Serializable>> getAllEvents()
+    public Map<Long, Map<String, Serializable>> getAllEvents()
     {
         if (inMemoryLogger == null)
             return new TreeMap<>();
@@ -173,7 +170,6 @@ public final class DiagnosticEventPersistence
         {
             DiagnosticEventStore<Long> store = entry.getValue();
             SortedMap<Long, Map<String, Serializable>> events = getEventsInternal(store, entry.getKey().getName(), 0L, 0, true);
-            logger.info(events.toString());
             allEvents.putAll(events);
         }
 
@@ -205,26 +201,36 @@ public final class DiagnosticEventPersistence
 
     public void enableEventPersistence(String eventClazz)
     {
-        try
-        {
-            logger.info("Enabling events: {}", eventClazz);
-            DiagnosticEventService.instance().subscribe(getEventClass(eventClazz), consumers);
-        }
-        catch (ClassNotFoundException | InvalidClassException e)
-        {
-            throw new RuntimeException(e);
-        }
+        enableEventPersistence(eventClazz, null);
     }
 
-    public <T extends Enum<T>> void enableEventPersistence(String eventClazz, T type)
+    /**
+     * Enables event persistence for a given event class and event type.
+     *
+     * @param eventClass event class to enable persistence for
+     * @param type       type of event to enable persistence for, when null, all types of given event class will be enabled
+     * @param <T>        type parameter of event type
+     */
+    public <T extends Enum<T>> void enableEventPersistence(String eventClass, T type)
     {
         try
         {
-            logger.info("Enabling events {} for type {}", eventClazz, type);
-            Iterator<Consumer<DiagnosticEvent>> consumerIterator = consumers.iterator();
-            while (consumerIterator.hasNext())
+            if (!consumers.isEmpty())
             {
-                DiagnosticEventService.instance().subscribe(getEventClass(eventClazz), type, consumerIterator.next());
+                if (type != null)
+                    logger.info("Enabling events {} for type {}", eventClass, type);
+                else
+                    logger.info("Enabling events {}", eventClass);
+
+                Class<DiagnosticEvent> eventClazz = getEventClass(eventClass);
+
+                for (Consumer<DiagnosticEvent> consumer : consumers)
+                {
+                    if (type != null)
+                        DiagnosticEventService.instance().subscribe(eventClazz, type, consumer);
+                    else
+                        DiagnosticEventService.instance().subscribe(eventClazz, consumer);
+                }
             }
         }
         catch (ClassNotFoundException | InvalidClassException e)
@@ -233,12 +239,40 @@ public final class DiagnosticEventPersistence
         }
     }
 
-    public void disableEventPersistence(String eventClazz)
+    /**
+     * Disables event persistence for a given event class.
+     *
+     * @param eventClass event class to disable persistence for
+     */
+    public void disableEventPersistence(String eventClass)
+    {
+        disableEventPersistence(eventClass, null);
+    }
+
+    /**
+     * Disables event persistence for a given event class and event type.
+     *
+     * @param eventClass event class to disable event for
+     * @param eventType  type of event of given event class, when null, all types of given event class will be disabled
+     * @param <T>        type parameter of event type
+     */
+    public <T extends Enum<T>> void disableEventPersistence(String eventClass, T eventType)
     {
         try
         {
-            logger.info("Disabling events: {}", eventClazz);
-            DiagnosticEventService.instance().unsubscribe(getEventClass(eventClazz), consumers);
+            if (!consumers.isEmpty())
+            {
+                if (eventType == null)
+                {
+                    logger.info("Disabling events {}", eventClass);
+                    DiagnosticEventService.instance().unsubscribe(getEventClass(eventClass), consumers);
+                }
+                else
+                {
+                    logger.info("Disabling events {} for type {}", eventClass, eventType);
+                    DiagnosticEventService.instance().unsubscribe(getEventClass(eventClass), eventType, consumers);
+                }
+            }
         }
         catch (ClassNotFoundException | InvalidClassException e)
         {
@@ -282,6 +316,8 @@ public final class DiagnosticEventPersistence
         @Override
         public void stop()
         {
+            stores.forEach((aClass, store) -> store.reset());
+            stores.clear();
         }
 
         @Override

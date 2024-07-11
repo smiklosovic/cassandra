@@ -136,7 +136,7 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
      */
     public synchronized <E extends DiagnosticEvent> void subscribe(Class<E> event, Consumer<E> consumer)
     {
-        logger.info("Adding subscriber: {}", consumer.getClass().getName());
+        logger.info("Adding subscriber {} to event {}", consumer.getClass().getName(), event.getSimpleName());
         subscribersByClass = ImmutableSetMultimap.<Class<? extends DiagnosticEvent>, Consumer<DiagnosticEvent>>builder()
                               .putAll(subscribersByClass)
                               .put(event, new TypedConsumerWrapper<>(consumer))
@@ -153,6 +153,7 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
                                                                                       T eventType,
                                                                                       Consumer<E> consumer)
     {
+        logger.debug("Adding subscriber {} to event {} and type {}", consumer.getClass().getName(), event.getSimpleName(), event.getName());
         ImmutableSetMultimap.Builder<Enum<?>, Consumer<DiagnosticEvent>> byTypeBuilder = ImmutableSetMultimap.builder();
         if (subscribersByClassAndType.containsKey(event))
             byTypeBuilder.putAll(subscribersByClassAndType.get(event));
@@ -168,6 +169,7 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
         subscribersByClassAndType = byClassBuilder
                                     .put(event, byTypeBuilder.build())
                                     .build();
+        logger.debug("Total subscribers for event types: {}", subscribersByClassAndType.values().size());
     }
 
     /**
@@ -210,9 +212,28 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
      */
     public synchronized <E extends DiagnosticEvent> void unsubscribe(@Nullable Class<E> event, Consumer<E> consumer)
     {
+        unsubscribe(event, null, consumer);
+    }
+
+    public synchronized <E extends DiagnosticEvent> void unsubscribe(@Nullable Class<E> event, Enum type, Consumer<E> consumer)
+    {
         // all events
         subscribersAll = ImmutableSet.copyOf(Iterables.filter(subscribersAll, (c) -> c != consumer));
 
+        if (type == null)
+            subscribersByClass = removeByClass(event, consumer);
+
+        subscribersByClassAndType = removeByType(event, type, consumer);
+    }
+
+    public synchronized <T extends Enum<T>, E extends DiagnosticEvent> void unsubscribe(Class<E> event, T type, Collection<Consumer<E>> consumers)
+    {
+        for (Consumer<E> consumer : consumers)
+            unsubscribe(event, type, consumer);
+    }
+
+    private <E extends DiagnosticEvent>  ImmutableSetMultimap<Class<? extends DiagnosticEvent>, Consumer<DiagnosticEvent>> removeByClass(@Nullable Class<E> event, Consumer<E> consumer)
+    {
         // event class
         ImmutableSetMultimap.Builder<Class<? extends DiagnosticEvent>, Consumer<DiagnosticEvent>> byClassBuilder = ImmutableSetMultimap.builder();
         Collection<Map.Entry<Class<? extends DiagnosticEvent>, Consumer<DiagnosticEvent>>> entries = subscribersByClass.entries();
@@ -228,9 +249,12 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
                 byClassBuilder = byClassBuilder.put(entry);
             }
         }
-        subscribersByClass = byClassBuilder.build();
 
+        return byClassBuilder.build();
+    }
 
+    private <E extends DiagnosticEvent> ImmutableMap<Class, ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>>> removeByType(@Nullable Class<E> event, Enum type, Consumer<E> consumer)
+    {
         // event class + type
         ImmutableMap.Builder<Class, ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>>> byClassAndTypeBuilder = ImmutableMap.builder();
         for (Map.Entry<Class, ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>>> byClassEntry : subscribersByClassAndType.entrySet())
@@ -243,7 +267,18 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
                 Consumer<DiagnosticEvent> subscriber = e.getValue();
                 if (subscriber instanceof TypedConsumerWrapper)
                     subscriber = ((TypedConsumerWrapper) subscriber).wrapped;
-                return subscriber != consumer || (event != null && !byClassEntry.getKey().equals(event));
+
+                if (type == null)
+                {
+                    return subscriber != consumer || (event != null && (!byClassEntry.getKey().equals(event)));
+                }
+                else
+                {
+                    boolean notType = e.getKey() != type;
+                    boolean notEvent = (event != null && (!byClassEntry.getKey().equals(event)));
+
+                    return subscriber != consumer || (notEvent || notType);
+                }
             }).forEach(byTypeBuilder::put);
 
             ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>> byType = byTypeBuilder.build();
@@ -251,7 +286,7 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
                 byClassAndTypeBuilder.put(byClassEntry.getKey(), byType);
         }
 
-        subscribersByClassAndType = byClassAndTypeBuilder.build();
+        return byClassAndTypeBuilder.build();
     }
 
     /**

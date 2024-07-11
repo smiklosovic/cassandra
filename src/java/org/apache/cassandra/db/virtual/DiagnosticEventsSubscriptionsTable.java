@@ -24,16 +24,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.audit.AuditEvent;
 import org.apache.cassandra.audit.AuditLogEntryType;
 import org.apache.cassandra.db.guardrails.GuardrailEvent;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.dht.BootstrapEvent;
 import org.apache.cassandra.dht.tokenallocator.TokenAllocatorEvent;
-import org.apache.cassandra.diag.DiagnosticEvent;
 import org.apache.cassandra.diag.DiagnosticEventPersistence;
 import org.apache.cassandra.diag.DiagnosticEventService;
 import org.apache.cassandra.gms.GossiperEvent;
@@ -47,22 +43,20 @@ import org.apache.cassandra.service.reads.repair.ReadRepairEvent;
 
 public class DiagnosticEventsSubscriptionsTable extends AbstractMutableVirtualTable
 {
-    private static final Logger logger = LoggerFactory.getLogger(DiagnosticEventsSubscriptionsTable.class);
-
-    private static final Map<Class<? extends DiagnosticEvent>, Set<Enum<?>>> ALL_EVENTS = new HashMap<>();
+    private static final Map<String, Set<Enum<?>>> ALL_EVENTS = new HashMap<>();
 
     {
-        ALL_EVENTS.put(AuditEvent.class, Set.of(AuditLogEntryType.values()));
-        ALL_EVENTS.put(BootstrapEvent.class, Set.of(BootstrapEvent.BootstrapEventType.values()));
-        ALL_EVENTS.put(GossiperEvent.class, Set.of(GossiperEvent.GossiperEventType.values()));
-        ALL_EVENTS.put(GuardrailEvent.class, Set.of(GuardrailEvent.GuardrailEventType.values()));
-        ALL_EVENTS.put(HintEvent.class, Set.of(HintEvent.HintEventType.values()));
-        ALL_EVENTS.put(HintsServiceEvent.class, Set.of(HintsServiceEvent.HintsServiceEventType.values()));
-        ALL_EVENTS.put(PartitionRepairEvent.class, Set.of(PartitionRepairEvent.PartitionRepairEventType.values()));
-        ALL_EVENTS.put(ReadRepairEvent.class, Set.of(ReadRepairEvent.ReadRepairEventType.values()));
-        ALL_EVENTS.put(SchemaAnnouncementEvent.class, Set.of(SchemaAnnouncementEvent.SchemaAnnouncementEventType.values()));
-        ALL_EVENTS.put(SchemaEvent.class, Set.of(SchemaEvent.SchemaEventType.values()));
-        ALL_EVENTS.put(TokenAllocatorEvent.class, Set.of(TokenAllocatorEvent.TokenAllocatorEventType.values()));
+        ALL_EVENTS.put(AuditEvent.class.getName(), Set.of(AuditLogEntryType.values()));
+        ALL_EVENTS.put(BootstrapEvent.class.getName(), Set.of(BootstrapEvent.BootstrapEventType.values()));
+        ALL_EVENTS.put(GossiperEvent.class.getName(), Set.of(GossiperEvent.GossiperEventType.values()));
+        ALL_EVENTS.put(GuardrailEvent.class.getName(), Set.of(GuardrailEvent.GuardrailEventType.values()));
+        ALL_EVENTS.put(HintEvent.class.getName(), Set.of(HintEvent.HintEventType.values()));
+        ALL_EVENTS.put(HintsServiceEvent.class.getName(), Set.of(HintsServiceEvent.HintsServiceEventType.values()));
+        ALL_EVENTS.put(PartitionRepairEvent.class.getName(), Set.of(PartitionRepairEvent.PartitionRepairEventType.values()));
+        ALL_EVENTS.put(ReadRepairEvent.class.getName(), Set.of(ReadRepairEvent.ReadRepairEventType.values()));
+        ALL_EVENTS.put(SchemaAnnouncementEvent.class.getName(), Set.of(SchemaAnnouncementEvent.SchemaAnnouncementEventType.values()));
+        ALL_EVENTS.put(SchemaEvent.class.getName(), Set.of(SchemaEvent.SchemaEventType.values()));
+        ALL_EVENTS.put(TokenAllocatorEvent.class.getName(), Set.of(TokenAllocatorEvent.TokenAllocatorEventType.values()));
     }
 
     protected DiagnosticEventsSubscriptionsTable(String keyspace)
@@ -89,52 +83,103 @@ public class DiagnosticEventsSubscriptionsTable extends AbstractMutableVirtualTa
     }
 
     @Override
-    protected void applyColumnUpdate(ColumnValues partitionKey, ColumnValues clusteringColumns, Optional<ColumnValue> columnValue)
+    protected void applyPartitionDeletion(ColumnValues partitionKey)
     {
-        if (!DiagnosticEventService.instance().isDiagnosticsEnabled())
+        if (!enabled())
             return;
 
-        if (!DiagnosticEventService.instance().isDiagnosticLogEnabled())
+        String clazz = partitionKey.value(0);
+
+        for (Map.Entry<Class<?>, Set<Enum<?>>> entry : DiagnosticEventService.instance().getAllEventClassesWithTypes().entrySet())
+        {
+            if (entry.getKey().getName().endsWith(clazz))
+            {
+                DiagnosticEventPersistence.instance().disableEventPersistence(entry.getKey().getName());
+                return;
+            }
+        }
+    }
+
+    @Override
+    protected void applyRowDeletion(ColumnValues partitionKey, ColumnValues clusteringColumns)
+    {
+        if (!enabled())
             return;
 
         String clazz = partitionKey.value(0);
         String type = clusteringColumns.value(0);
 
-        Class<?> subscriptionClass = null;
-        Set<Enum<?>> subscriptionTypes = new HashSet<>();
-
-        for (Map.Entry<Class<? extends DiagnosticEvent>, Set<Enum<?>>> entry : ALL_EVENTS.entrySet())
+        for (Map.Entry<Class<?>, Set<Enum<?>>> entry : DiagnosticEventService.instance().getAllEventClassesWithTypes().entrySet())
         {
-            if (subscriptionClass != null && !subscriptionTypes.isEmpty())
-                break;
-
-            Class<?> eventClass = entry.getKey();
-            if (eventClass.getName().equalsIgnoreCase(clazz) || eventClass.getSimpleName().equalsIgnoreCase(clazz))
+            if (entry.getKey().getName().endsWith(clazz))
             {
-                subscriptionClass = eventClass;
+                for (Enum enumType : entry.getValue())
+                {
+                    if (enumType.name().equals(type))
+                    {
+                        DiagnosticEventPersistence.instance().disableEventPersistence(entry.getKey().getName(), enumType);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
+    public void truncate()
+    {
+        if (!enabled())
+            return;
+
+        for (Map.Entry<Class<?>, Set<Enum<?>>> entry : DiagnosticEventService.instance().getAllEventClassesWithTypes().entrySet())
+            DiagnosticEventPersistence.instance().disableEventPersistence(entry.getKey().getName());
+    }
+
+    @Override
+    protected void applyColumnUpdate(ColumnValues partitionKey, ColumnValues clusteringColumns, Optional<ColumnValue> columnValue)
+    {
+        if (!enabled())
+            return;
+
+        String clazz = partitionKey.value(0);
+        String type = clusteringColumns.value(0);
+
+        Map<String, Set<Enum<?>>> subscriptions = new HashMap<>();
+
+        for (Map.Entry<String, Set<Enum<?>>> entry : ALL_EVENTS.entrySet())
+        {
+            String eventClassName = entry.getKey();
+            if (eventClassName.endsWith(clazz) || clazz.equalsIgnoreCase("all"))
+            {
+                subscriptions.put(eventClassName, new HashSet<>());
 
                 if (type.equalsIgnoreCase("all"))
                 {
-                    subscriptionTypes.addAll(entry.getValue());
+                    subscriptions.get(eventClassName).addAll(entry.getValue());
                 }
                 else
                 {
                     for (Enum<?> typeEnum : entry.getValue())
                     {
-                        if (typeEnum.name().equalsIgnoreCase(type))
-                        {
-                            subscriptionTypes.add(typeEnum);
-                            break;
-                        }
+                        if (typeEnum.name().equals(type))
+                            subscriptions.get(eventClassName).add(typeEnum);
                     }
                 }
             }
         }
 
-        if (subscriptionClass == null || subscriptionTypes.isEmpty())
-            return;
+        for (Map.Entry<String, Set<Enum<?>>> entry : subscriptions.entrySet())
+        {
+            String eventClass = entry.getKey();
+            Set<Enum<?>> eventTypes = entry.getValue();
 
-        for (Enum subscriptionType : subscriptionTypes)
-            DiagnosticEventPersistence.instance().enableEventPersistence(subscriptionClass.getName(), subscriptionType);
+            for (Enum eventType : eventTypes)
+                DiagnosticEventPersistence.instance().enableEventPersistence(eventClass, eventType);
+        }
+    }
+
+    private boolean enabled()
+    {
+        return DiagnosticEventService.instance().isDiagnosticsEnabled();
     }
 }

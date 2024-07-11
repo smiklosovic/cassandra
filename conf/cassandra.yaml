@@ -1868,11 +1868,11 @@ audit_logging_options:
 # on internal state and temporal relationships across events, accessible by clients via JMX.
 diagnostic_events_enabled: true
 
-diagnostic_logging_options:
-    enabled: true
-    logger:
-      - class_name: BinDiagnosticLogger
-    diagnostic_log_dir: /tmp/diagnostics
+#diagnostic_logging_options:
+    # enabled: true
+    # logger:
+    #  - class_name: BinDiagnosticLogger
+    #  diagnostic_log_dir: /tmp/diagnostics
     # roll_cycle: HOURLY
     # block: true
     # max_queue_weight: 268435456 # 256 MiB
