@@ -26,11 +26,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
+import com.google.common.collect.ImmutableSetMultimap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,8 +63,10 @@ public final class DiagnosticEventPersistence
             return;
 
         inMemoryLogger = new InMemoryDiagnosticLogger();
-        diagnosticLogOptions = DatabaseDescriptor.getDiagnosticLoggingOptions();
         consumers.add(inMemoryLogger);
+        diagnosticLogOptions = DatabaseDescriptor.getDiagnosticLoggingOptions();
+
+        enablePersistentDiagnosticLog(diagnosticLogOptions);
 
         initialized = true;
     }
@@ -78,24 +82,64 @@ public final class DiagnosticEventPersistence
         return instance;
     }
 
-    public synchronized void disableDiagnosticLogging()
+    private void unsubscribeLogger(IDiagnosticLogger logger)
     {
-        if (diagnosticLogger == null)
+        for (Class clazz : DiagnosticEventService.instance().getSubscribersByClass())
+            DiagnosticEventService.instance().unsubscribe(clazz, logger);
+
+        for (Map.Entry<Class, ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>>> entry : DiagnosticEventService.instance().getSubscribesByClassAndType().entrySet())
         {
-            return;
+            for (Enum<?> type : entry.getValue().keySet())
+                DiagnosticEventService.instance().unsubscribe(entry.getKey(), type, logger);
+        }
+    }
+
+    private Map<Class, Set<Enum<?>>> previousSubscriptions = new HashMap<>();
+
+    public synchronized void disableDiagnosticLog()
+    {
+        Map<Class, Set<Enum<?>>> previousSubscriptions = new HashMap<>();
+
+        for (Map.Entry<Class, ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>>> entry : DiagnosticEventService.instance().getSubscribesByClassAndType().entrySet())
+        {
+            for (Map.Entry<Enum<?>, Consumer<DiagnosticEvent>> entryValue : entry.getValue().entries())
+            {
+                if (entryValue.getValue() == inMemoryLogger)
+                {
+                    if (!previousSubscriptions.containsKey(entry.getKey()))
+                        previousSubscriptions.put(entry.getKey(), new HashSet<>());
+
+                    previousSubscriptions.get(entry.getKey()).add(entryValue.getKey());
+                }
+            }
         }
 
-        try
+        this.previousSubscriptions = previousSubscriptions;
+        inMemoryLogger.stop();
+        consumers.remove(inMemoryLogger);
+    }
+
+    public synchronized void enableDiagnosticLog()
+    {
+        consumers.add(inMemoryLogger);
+
+        for (Map.Entry<Class, Set<Enum<?>>> entry : previousSubscriptions.entrySet())
         {
-            diagnosticLogger.stop();
-            inMemoryLogger.stop();
+            for (Enum type : entry.getValue())
+                DiagnosticEventService.instance().subscribe(entry.getKey(), type, inMemoryLogger);
         }
-        finally
-        {
-            consumers.remove(diagnosticLogger);
-            diagnosticLogger = null;
-            diagnosticLogOptions.enabled = false;
-        }
+    }
+
+    public synchronized void disablePersistentDiagnosticLog()
+    {
+        if (diagnosticLogger == null)
+            return;
+
+        unsubscribeLogger(diagnosticLogger);
+        diagnosticLogger.stop();
+        consumers.remove(diagnosticLogger);
+        diagnosticLogger = null;
+        diagnosticLogOptions.enabled = false;
     }
 
     public synchronized DiagnosticLogOptions getDiagnosticLogOptions()
@@ -106,12 +150,12 @@ public final class DiagnosticEventPersistence
         return diagnosticLogOptions.enabled ? diagnosticLogOptions : DatabaseDescriptor.getDiagnosticLoggingOptions();
     }
 
-    public synchronized void enableDiagnosticLogging(DiagnosticLogOptions options)
+    public synchronized void enablePersistentDiagnosticLog(DiagnosticLogOptions options)
     {
         if (!options.enabled)
             return;
 
-        logger.info("Enabling diagnostic logging");
+        logger.info("Enabling persistent diagnostic logging");
 
         IDiagnosticLogger oldLogger = diagnosticLogger;
 
@@ -120,10 +164,8 @@ public final class DiagnosticEventPersistence
 
         // subscribe to all events there are some subscriptions for to log all events
         // which are somewhere subscribed
-        for (Class clazz : DiagnosticEventService.instance().getAllEventClassesWithSubscribers())
-        {
+        for (Class clazz : DiagnosticEventService.instance().getSubscribersByClass())
             DiagnosticEventService.instance().subscribe(clazz, diagnosticLogger);
-        }
 
         consumers.add(diagnosticLogger);
 
@@ -134,7 +176,7 @@ public final class DiagnosticEventPersistence
         }
     }
 
-    public boolean isDiagnosticLogEnabled()
+    public boolean isPersistentDiagnosticLogEnabled()
     {
         return diagnosticLogger != null && diagnosticLogger.isEnabled() && consumers.contains(diagnosticLogger);
     }
@@ -310,7 +352,7 @@ public final class DiagnosticEventPersistence
         @Override
         public boolean isEnabled()
         {
-            return true;
+            return DatabaseDescriptor.diagnosticEventsEnabled();
         }
 
         @Override
@@ -323,6 +365,9 @@ public final class DiagnosticEventPersistence
         @Override
         public void accept(DiagnosticEvent event)
         {
+            if (!isEnabled())
+                return;
+
             Class<? extends DiagnosticEvent> cls = event.getClass();
             if (logger.isTraceEnabled())
                 logger.trace("Persisting received {} event", cls.getName());

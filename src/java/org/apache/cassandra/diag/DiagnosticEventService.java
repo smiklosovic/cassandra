@@ -74,11 +74,11 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
     {
         // we can not initialize in static methods because DatabaseDescriptor
         // which is called in these below is not populated yet
-        if (!initialized && DatabaseDescriptor.diagnosticEventsEnabled())
-        {
-            DiagnosticEventPersistence.instance().initialize();
-            initialized = true;
-        }
+        if (initialized || !DatabaseDescriptor.diagnosticEventsEnabled())
+            return;
+
+        DiagnosticEventPersistence.instance().initialize();
+        initialized = true;
     }
 
     /**
@@ -340,9 +340,14 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
         return DatabaseDescriptor.diagnosticEventsEnabled() && hasSubscribers(event, eventType);
     }
 
-    public ImmutableSet<Class<? extends DiagnosticEvent>> getAllEventClassesWithSubscribers()
+    public ImmutableSet<Class<? extends DiagnosticEvent>> getSubscribersByClass()
     {
         return subscribersByClass.keySet();
+    }
+
+    public ImmutableMap<Class, ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>>> getSubscribesByClassAndType()
+    {
+        return subscribersByClassAndType;
     }
 
     public Map<Class<?>, Set<Enum<?>>> getAllEventClassesWithTypes()
@@ -360,7 +365,7 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
     }
 
     /**
-     * Removes all active subscribers. Should only be called from testing.
+     * Removes all active subscribers.
      */
     public synchronized void cleanup()
     {
@@ -376,16 +381,23 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
 
     public void disableDiagnostics()
     {
-        // killswitch will disable logger too
-        disableDiagnosticLog();
+        if (!isDiagnosticsEnabled())
+            return;
+
         DatabaseDescriptor.setDiagnosticEventsEnabled(false);
+        DiagnosticEventPersistence.instance().disableDiagnosticLog();
+        disablePersistentDiagnosticLog();
+        cleanup();
     }
 
     public void enableDiagnostics()
     {
-        // we have to explicitly start enable diagnostic logging
-        // this enablement will pour events into memory only
+        if (isDiagnosticsEnabled())
+            return;
+
         DatabaseDescriptor.setDiagnosticEventsEnabled(true);
+        DiagnosticEventPersistence.instance().enableDiagnosticLog();
+        enablePersistentDiagnosticLog();
     }
 
     public SortedMap<Long, Map<String, Serializable>> readEvents(String eventClazz, Long lastKey, int limit)
@@ -403,9 +415,9 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
         DiagnosticEventPersistence.instance().disableEventPersistence(eventClazz);
     }
 
-    public boolean isDiagnosticLogEnabled()
+    public boolean isPersistentDiagnosticLogEnabled()
     {
-        return DiagnosticEventPersistence.instance().isDiagnosticLogEnabled();
+        return DiagnosticEventPersistence.instance().isPersistentDiagnosticLogEnabled();
     }
 
     @Override
@@ -414,16 +426,16 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
         return DiagnosticLogOptionsCompositeData.toCompositeData(DiagnosticEventPersistence.instance().getDiagnosticLogOptions());
     }
 
-    public void enableDiagnosticLog()
+    public void enablePersistentDiagnosticLog()
     {
         DiagnosticLogOptions options = DatabaseDescriptor.getDiagnosticLoggingOptions();
-        enableDiagnosticLog(options.logger.class_name, options.logger.parameters, options.max_archive_retries, options.block,
-                            options.roll_cycle, options.max_log_size, options.max_queue_weight,
-                            options.archive_command);
+        enablePersistentDiagnosticLog(options.logger.class_name, options.logger.parameters, options.max_archive_retries, options.block,
+                                      options.roll_cycle, options.max_log_size, options.max_queue_weight,
+                                      options.archive_command);
     }
 
-    public void enableDiagnosticLog(String loggerName, Map<String, String> parameters, Integer maxArchiveRetries, Boolean block, String rollCycle,
-                                    Long maxLogSize, Integer maxQueueWeight, String archiveCommand)
+    public void enablePersistentDiagnosticLog(String loggerName, Map<String, String> parameters, Integer maxArchiveRetries, Boolean block, String rollCycle,
+                                              Long maxLogSize, Integer maxQueueWeight, String archiveCommand)
     {
         if (!DatabaseDescriptor.diagnosticEventsEnabled())
         {
@@ -446,20 +458,13 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
         .withLogger(loggerName, parameters)
         .build();
 
-        DiagnosticEventService.instance().initialize();
-        DiagnosticEventPersistence.instance().enableDiagnosticLogging(options);
+        DiagnosticEventPersistence.instance().enablePersistentDiagnosticLog(options);
         logger.info("Diagnostic logger is enabled with configuration: {}", options);
     }
 
-    public void disableDiagnosticLog()
+    public void disablePersistentDiagnosticLog()
     {
-        if (!DiagnosticEventPersistence.instance().isDiagnosticLogEnabled())
-            logger.info("Diagnostic logger is already disabled.");
-        else
-        {
-            DiagnosticEventPersistence.instance().disableDiagnosticLogging();
-            logger.info("Diagnostic logger is disabled.");
-        }
+        DiagnosticEventPersistence.instance().disablePersistentDiagnosticLog();
     }
 
     /**

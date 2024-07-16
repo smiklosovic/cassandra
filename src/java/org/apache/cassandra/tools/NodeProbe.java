@@ -2300,12 +2300,12 @@ public class NodeProbe implements AutoCloseable
 
     public void disableDiagnosticLog()
     {
-        desProxy.disableDiagnosticLog();
+        desProxy.disablePersistentDiagnosticLog();
     }
 
     public boolean isDiagnosticLogEnabled()
     {
-        return desProxy.isDiagnosticLogEnabled();
+        return desProxy.isPersistentDiagnosticLogEnabled();
     }
 
     public void enableAuditLog(String loggerName, Map<String, String> parameters, String includedKeyspaces, String excludedKeyspaces,
@@ -2331,7 +2331,7 @@ public class NodeProbe implements AutoCloseable
     public void enableDiagnosticLog(String loggerName, Map<String, String> parameters, Integer maxArchiveRetries, Boolean block, String rollCycle,
                                     Long maxLogSize, Integer maxQueueWeight, String archiveCommand)
     {
-        desProxy.enableDiagnosticLog(loggerName, parameters, maxArchiveRetries, block, rollCycle, maxLogSize, maxQueueWeight, archiveCommand);
+        desProxy.enablePersistentDiagnosticLog(loggerName, parameters, maxArchiveRetries, block, rollCycle, maxLogSize, maxQueueWeight, archiveCommand);
     }
 
     public void enableOldProtocolVersions()

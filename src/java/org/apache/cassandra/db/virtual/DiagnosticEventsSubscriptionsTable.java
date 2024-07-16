@@ -76,7 +76,7 @@ public class DiagnosticEventsSubscriptionsTable extends AbstractMutableVirtualTa
 
         DiagnosticEventService.instance().getAllEventClassesWithTypes().forEach((clazz, types) -> {
             for (Enum<?> type : types)
-                dataSet.row(clazz.getSimpleName(), type.name());
+                dataSet.row(clazz.getName(), type.name());
         });
 
         return dataSet;

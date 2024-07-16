@@ -91,7 +91,7 @@ public final class DiagnosticEventMemoryStore implements DiagnosticEventStore<Lo
         if (iterator.hasNext())
         {
             DiagnosticEvent event = iterator.next();
-            LastEventIdBroadcaster.instance().setLastEventId(event.getClass().getName(), 0);
+            LastEventIdBroadcaster.instance().setLastEventId(event.getClass().getName(), 0L);
         }
         lastKey.set(0);
         events.clear();

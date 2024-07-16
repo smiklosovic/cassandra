@@ -68,14 +68,14 @@ public class DiagnosticLoggingTest extends TestBaseImpl
     public void testDiagnosticLoggingEnableAndDisable()
     {
         boolean diagnosticEnabled = node.callOnInstance((SerializableCallable<Boolean>) () -> DiagnosticEventService.instance().isDiagnosticsEnabled());
-        boolean diagnosticLogEnabled = node.callOnInstance((SerializableCallable<Boolean>) () -> DiagnosticEventService.instance().isDiagnosticLogEnabled());
+        boolean diagnosticLogEnabled = node.callOnInstance((SerializableCallable<Boolean>) () -> DiagnosticEventService.instance().isPersistentDiagnosticLogEnabled());
 
         assertTrue(diagnosticEnabled);
         assertFalse(diagnosticLogEnabled);
 
-        node.runOnInstance((IIsolatedExecutor.SerializableRunnable) () -> DiagnosticEventService.instance().enableDiagnosticLog());
-        assertTrue(node.callOnInstance((SerializableCallable<Boolean>) () -> DiagnosticEventService.instance().isDiagnosticLogEnabled()));
-        node.runOnInstance((IIsolatedExecutor.SerializableRunnable) () -> DiagnosticEventService.instance().disableDiagnosticLog());
-        assertFalse(node.callOnInstance((SerializableCallable<Boolean>) () -> DiagnosticEventService.instance().isDiagnosticLogEnabled()));
+        node.runOnInstance((IIsolatedExecutor.SerializableRunnable) () -> DiagnosticEventService.instance().enablePersistentDiagnosticLog());
+        assertTrue(node.callOnInstance((SerializableCallable<Boolean>) () -> DiagnosticEventService.instance().isPersistentDiagnosticLogEnabled()));
+        node.runOnInstance((IIsolatedExecutor.SerializableRunnable) () -> DiagnosticEventService.instance().disablePersistentDiagnosticLog());
+        assertFalse(node.callOnInstance((SerializableCallable<Boolean>) () -> DiagnosticEventService.instance().isPersistentDiagnosticLogEnabled()));
     }
 }

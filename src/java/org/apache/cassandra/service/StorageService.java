@@ -118,6 +118,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.StreamStateStore;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.dht.Token.TokenFactory;
+import org.apache.cassandra.diag.DiagnosticEventService;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.UnavailableException;
@@ -875,6 +876,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         HintsService.instance.startDispatch();
         BatchlogManager.instance.start();
         startSnapshotManager();
+        DiagnosticEventService.instance().initialize();
         servicesInitialized = true;
     }
 

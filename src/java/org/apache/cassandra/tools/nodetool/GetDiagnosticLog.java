@@ -34,7 +34,7 @@ public class GetDiagnosticLog extends NodeTool.NodeToolCmd
         final TableBuilder tableBuilder = new TableBuilder();
 
         DiagnosticEventServiceMBean proxy = probe.getDiagnosticEventServiceProxy();
-        tableBuilder.add("enabled", Boolean.toString(proxy.isDiagnosticLogEnabled()));
+        tableBuilder.add("enabled", Boolean.toString(proxy.isPersistentDiagnosticLogEnabled()));
 
         final DiagnosticLogOptions options = probe.getDiagnosticLogOptions();
         tableBuilder.add("logger", options.logger.class_name);

@@ -36,7 +36,7 @@ public class DiagnosticEventsTable extends AbstractVirtualTable
                            .kind(TableMetadata.Kind.VIRTUAL)
                            .addPartitionKeyColumn("class", UTF8Type.instance)
                            .addClusteringColumn("timestamp", TimestampType.instance)
-                           .addClusteringColumn("type", UTF8Type.instance)
+                           .addRegularColumn("type", UTF8Type.instance)
                            .addRegularColumn("value", UTF8Type.instance)
                            .build());
     }
@@ -46,7 +46,7 @@ public class DiagnosticEventsTable extends AbstractVirtualTable
     {
         SimpleDataSet result = new SimpleDataSet(metadata());
 
-        if (!DiagnosticEventPersistence.instance().isDiagnosticLogEnabled())
+        if (!DiagnosticEventPersistence.instance().isPersistentDiagnosticLogEnabled())
             return result;
 
         Map<Long, Map<String, Serializable>> allEvents = DiagnosticEventPersistence.instance().getAllEvents();
@@ -56,10 +56,12 @@ public class DiagnosticEventsTable extends AbstractVirtualTable
             Map<String, Serializable> event = entry.getValue();
             String clazz = (String) event.remove("class");
             String type = (String) event.remove("type");
-            Long timestamp = (Long) event.remove("timestamp");
+            Long timestamp = (Long) event.remove("ts");
             event.remove("thread");
 
-            result.row(clazz, new Date(timestamp), type).column("value", event.toString());
+            result.row(clazz, new Date(timestamp))
+                  .column("type", type)
+                  .column("value", event.toString());
         }
 
         return result;
