@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -319,10 +320,10 @@ public final class DiagnosticEventPersistence
 
         TreeMap<Long, Map<String, Serializable>> allEvents = new TreeMap<>();
 
-        for (Map.Entry<Class, DiagnosticEventStore<Long>> entry : inMemoryLogger.stores.entrySet())
+        for (Map.Entry<String, DiagnosticEventStore<Long>> entry : inMemoryLogger.stores.entrySet())
         {
             DiagnosticEventStore<Long> store = entry.getValue();
-            SortedMap<Long, Map<String, Serializable>> events = getEventsInternal(store, entry.getKey().getName(), 0L, 0, true);
+            SortedMap<Long, Map<String, Serializable>> events = getEventsInternal(store, entry.getKey(), 0L, 0, true);
             allEvents.putAll(events);
         }
 
@@ -352,9 +353,28 @@ public final class DiagnosticEventPersistence
         return ret;
     }
 
+    /**
+     * Remove diagnostic events from memory stores.
+     */
+    public void removeEvents()
+    {
+        for (Map.Entry<String, DiagnosticEventStore<Long>> storeEntry : inMemoryLogger.stores.entrySet())
+            storeEntry.getValue().reset();
+    }
+
+    /**
+     * Remove diagnostic events from memory store of given event class.
+     *
+     * @param eventClass event class to remove all events of
+     */
+    public void removeEvents(String eventClass)
+    {
+        inMemoryLogger.getStoreIfExists(eventClass).ifPresent(DiagnosticEventStore::reset);
+    }
+
     private static class InMemoryDiagnosticLogger implements IDiagnosticLogger
     {
-        private final Map<Class, DiagnosticEventStore<Long>> stores = new ConcurrentHashMap<>();
+        private final Map<String, DiagnosticEventStore<Long>> stores = new ConcurrentHashMap<>();
 
         @Override
         public boolean isEnabled()
@@ -383,9 +403,26 @@ public final class DiagnosticEventPersistence
             LastEventIdBroadcaster.instance().setLastEventId(event.getClass().getName(), store.getLastEventId());
         }
 
-        public DiagnosticEventStore<Long> getStore(Class cls)
+        /**
+         * Return store if exists, otherwise return null, do not create it.
+         *
+         * @param eventClassName class name of diagnostic event class
+         * @return store if exists, empty optional otherwise
+         */
+        public Optional<DiagnosticEventStore<Long>> getStoreIfExists(String eventClassName)
         {
-            return stores.computeIfAbsent(cls, (storeKey) -> new DiagnosticEventMemoryStore());
+            return Optional.ofNullable(stores.get(eventClassName));
+        }
+
+        /**
+         * Return store, if it does not exist, create empty store and memoize it.
+         *
+         * @param eventClass class of event to create store for
+         * @return store of given class
+         */
+        public DiagnosticEventStore<Long> getStore(Class eventClass)
+        {
+            return stores.computeIfAbsent(eventClass.getName(), (storeKey) -> new DiagnosticEventMemoryStore());
         }
     }
 }

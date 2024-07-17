@@ -28,7 +28,7 @@ import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.diag.DiagnosticEventPersistence;
 import org.apache.cassandra.schema.TableMetadata;
 
-public class DiagnosticEventsTable extends AbstractVirtualTable
+public class DiagnosticEventsTable extends AbstractMutableVirtualTable
 {
     protected DiagnosticEventsTable(String keyspace)
     {
@@ -53,6 +53,19 @@ public class DiagnosticEventsTable extends AbstractVirtualTable
     public DataSet data()
     {
         return processEvents(DiagnosticEventPersistence.instance().getAllEvents());
+    }
+
+    @Override
+    protected void applyPartitionDeletion(ColumnValues partitionKey)
+    {
+        String eventClass = partitionKey.value(0);
+        DiagnosticEventPersistence.instance().removeEvents(eventClass);
+    }
+
+    @Override
+    public void truncate()
+    {
+        DiagnosticEventPersistence.instance().removeEvents();
     }
 
     private SimpleDataSet processEvents(Map<Long, Map<String, Serializable>> events)

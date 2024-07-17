@@ -19,9 +19,11 @@
 package org.apache.cassandra.diag.store;
 
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Set;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -87,12 +89,18 @@ public final class DiagnosticEventMemoryStore implements DiagnosticEventStore<Lo
     @Override
     public void reset()
     {
+        Set<String> eventClasses = new HashSet<>();
+
         Iterator<DiagnosticEvent> iterator = events.values().iterator();
         if (iterator.hasNext())
         {
             DiagnosticEvent event = iterator.next();
-            LastEventIdBroadcaster.instance().setLastEventId(event.getClass().getName(), 0L);
+            eventClasses.add(event.getClass().getName());
         }
+
+        for (String eventClass : eventClasses)
+            LastEventIdBroadcaster.instance().setLastEventId(eventClass, 0L);
+
         lastKey.set(0);
         events.clear();
     }
