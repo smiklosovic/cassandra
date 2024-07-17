@@ -18,10 +18,11 @@
 
 package org.apache.cassandra.tools;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -43,8 +44,12 @@ import org.apache.cassandra.diag.BinDiagnosticLogger;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.utils.binlog.BinLog;
 
+import static java.lang.String.format;
+import static org.apache.cassandra.diag.BinDiagnosticLogger.CURRENT_VERSION;
+import static org.apache.cassandra.diag.BinDiagnosticLogger.DIAGNOSTIC_LOG_TYPE;
+
 /**
- * Tool to view the content of DiagnosticLog files in human readable format. Default implementation for DiagnosticLog files
+ * Tool to view the content of DiagnosticLog files in human-readable format. Default implementation for DiagnosticLog files
  * logs diagnostic messages in {@link org.apache.cassandra.utils.binlog.BinLog} format, this tool prints the contens of
  * binary diagnostic log files in text format.
  */
@@ -75,11 +80,18 @@ public class DiagnosticLogViewer
     {
         //Backoff strategy for spinning on the queue, not aggressive at all as this doesn't need to be low latency
         Pauser pauser = Pauser.millis(100);
-        List<ExcerptTailer> tailers = pathList.stream()
-                                              .distinct()
-                                              .map(path -> SingleChronicleQueueBuilder.single(new File(path).toJavaIOFile()).readOnly(true).rollCycle(RollCycles.valueOf(rollCycle)).build())
-                                              .map(SingleChronicleQueue::createTailer)
-                                              .collect(Collectors.toList());
+
+        List<ExcerptTailer> tailers = new ArrayList<>();
+
+        for (String path : new HashSet<>(pathList))
+        {
+            SingleChronicleQueue queue = SingleChronicleQueueBuilder.single(new File(path).toJavaIOFile())
+                                                                    .readOnly(true)
+                                                                    .rollCycle(RollCycles.valueOf(rollCycle))
+                                                                    .build();
+            tailers.add(queue.createTailer());
+        }
+
         boolean hadWork = true;
         while (hadWork)
         {
@@ -87,9 +99,7 @@ public class DiagnosticLogViewer
             for (ExcerptTailer tailer : tailers)
             {
                 while (tailer.readDocument(new DisplayRecord(ignoreUnsupported, displayFun)))
-                {
                     hadWork = true;
-                }
             }
 
             if (follow)
@@ -142,34 +152,26 @@ public class DiagnosticLogViewer
 
         private boolean isSupportedVersion(int version)
         {
-            if (version <= BinDiagnosticLogger.CURRENT_VERSION)
-            {
+            if (version <= CURRENT_VERSION)
                 return true;
-            }
 
             if (ignoreUnsupported)
-            {
                 return false;
-            }
 
-            throw new IORuntimeException("Unsupported record version [" + version
-                                         + "] - highest supported version is [" + BinDiagnosticLogger.CURRENT_VERSION + ']');
+            throw new IORuntimeException(format("Unsupported record version [%s] - highest supported version is [%s]",
+                                                version, CURRENT_VERSION));
         }
 
         private boolean isSupportedType(String type)
         {
-            if (BinDiagnosticLogger.DIAGNOSTIC_LOG_TYPE.equals(type))
-            {
+            if (DIAGNOSTIC_LOG_TYPE.equals(type))
                 return true;
-            }
 
             if (ignoreUnsupported)
-            {
                 return false;
-            }
 
-            throw new IORuntimeException("Unsupported record type field [" + type
-                                         + "] - supported type is [" + BinDiagnosticLogger.DIAGNOSTIC_LOG_TYPE + ']');
+            throw new IORuntimeException(format("Unsupported record type field [%s] - supported type is [%s]",
+                                                type, DIAGNOSTIC_LOG_TYPE));
         }
     }
 
@@ -200,7 +202,7 @@ public class DiagnosticLogViewer
                 }
 
                 String[] args = cmd.getArgs();
-                if (args.length <= 0)
+                if (args.length == 0)
                 {
                     System.err.println("Diagnostic log files directory path is a required argument.");
                     printUsage(options);
@@ -210,13 +212,10 @@ public class DiagnosticLogViewer
                 DiagnosticLogViewerOptions opts = new DiagnosticLogViewerOptions(args);
 
                 opts.follow = cmd.hasOption(FOLLOW);
-
                 opts.ignoreUnsupported = cmd.hasOption(IGNORE);
 
                 if (cmd.hasOption(ROLL_CYCLE))
-                {
                     opts.rollCycle = cmd.getOptionValue(ROLL_CYCLE);
-                }
 
                 return opts;
             }
