@@ -22,6 +22,7 @@ import java.io.Serializable;
 import java.util.Date;
 import java.util.Map;
 
+import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.marshal.TimestampType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.diag.DiagnosticEventPersistence;
@@ -42,16 +43,23 @@ public class DiagnosticEventsTable extends AbstractVirtualTable
     }
 
     @Override
+    public DataSet data(DecoratedKey partitionKey)
+    {
+        String eventClass = UTF8Type.instance.getString(partitionKey.getKey());
+        return processEvents(DiagnosticEventPersistence.instance().getEvents(eventClass));
+    }
+
+    @Override
     public DataSet data()
+    {
+        return processEvents(DiagnosticEventPersistence.instance().getAllEvents());
+    }
+
+    private SimpleDataSet processEvents(Map<Long, Map<String, Serializable>> events)
     {
         SimpleDataSet result = new SimpleDataSet(metadata());
 
-        if (!DiagnosticEventPersistence.instance().isPersistentDiagnosticLogEnabled())
-            return result;
-
-        Map<Long, Map<String, Serializable>> allEvents = DiagnosticEventPersistence.instance().getAllEvents();
-
-        for (Map.Entry<Long, Map<String, Serializable>> entry : allEvents.entrySet())
+        for (Map.Entry<Long, Map<String, Serializable>> entry : events.entrySet())
         {
             Map<String, Serializable> event = entry.getValue();
             String clazz = (String) event.remove("class");

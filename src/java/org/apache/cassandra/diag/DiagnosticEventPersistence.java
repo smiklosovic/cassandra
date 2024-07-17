@@ -98,23 +98,23 @@ public final class DiagnosticEventPersistence
 
     public synchronized void disableDiagnosticLog()
     {
-        Map<Class, Set<Enum<?>>> previousSubscriptions = new HashMap<>();
-
-        for (Map.Entry<Class, ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>>> entry : DiagnosticEventService.instance().getSubscribesByClassAndType().entrySet())
-        {
-            for (Map.Entry<Enum<?>, Consumer<DiagnosticEvent>> entryValue : entry.getValue().entries())
-            {
-                if (entryValue.getValue() == inMemoryLogger)
-                {
-                    if (!previousSubscriptions.containsKey(entry.getKey()))
-                        previousSubscriptions.put(entry.getKey(), new HashSet<>());
-
-                    previousSubscriptions.get(entry.getKey()).add(entryValue.getKey());
-                }
-            }
-        }
-
-        this.previousSubscriptions = previousSubscriptions;
+//        Map<Class, Set<Enum<?>>> previousSubscriptions = new HashMap<>();
+//
+//        for (Map.Entry<Class, ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>>> entry : DiagnosticEventService.instance().getSubscribesByClassAndType().entrySet())
+//        {
+//            for (Map.Entry<Enum<?>, Consumer<DiagnosticEvent>> entryValue : entry.getValue().entries())
+//            {
+//                if (entryValue.getValue() == inMemoryLogger)
+//                {
+//                    if (!previousSubscriptions.containsKey(entry.getKey()))
+//                        previousSubscriptions.put(entry.getKey(), new HashSet<>());
+//
+//                    previousSubscriptions.get(entry.getKey()).add(entryValue.getKey());
+//                }
+//            }
+//        }
+//
+//        this.previousSubscriptions = previousSubscriptions;
         inMemoryLogger.stop();
         consumers.remove(inMemoryLogger);
     }
@@ -123,11 +123,11 @@ public final class DiagnosticEventPersistence
     {
         consumers.add(inMemoryLogger);
 
-        for (Map.Entry<Class, Set<Enum<?>>> entry : previousSubscriptions.entrySet())
-        {
-            for (Enum type : entry.getValue())
-                DiagnosticEventService.instance().subscribe(entry.getKey(), type, inMemoryLogger);
-        }
+//        for (Map.Entry<Class, Set<Enum<?>>> entry : previousSubscriptions.entrySet())
+//        {
+//            for (Enum type : entry.getValue())
+//                DiagnosticEventService.instance().subscribe(entry.getKey(), type, inMemoryLogger);
+//        }
     }
 
     public synchronized void disablePersistentDiagnosticLog()
@@ -167,6 +167,8 @@ public final class DiagnosticEventPersistence
         for (Class clazz : DiagnosticEventService.instance().getSubscribersByClass())
             DiagnosticEventService.instance().subscribe(clazz, diagnosticLogger);
 
+        // TODO - subscribe by class and type too
+
         consumers.add(diagnosticLogger);
 
         if (oldLogger != null)
@@ -179,66 +181,6 @@ public final class DiagnosticEventPersistence
     public boolean isPersistentDiagnosticLogEnabled()
     {
         return diagnosticLogger != null && diagnosticLogger.isEnabled() && consumers.contains(diagnosticLogger);
-    }
-
-    public SortedMap<Long, Map<String, Serializable>> getEvents(String eventClazz, Long key, int limit, boolean includeKey)
-    {
-        assert eventClazz != null;
-        assert key != null;
-        assert limit >= 0;
-
-        Class cls;
-        try
-        {
-            cls = getEventClass(eventClazz);
-        }
-        catch (ClassNotFoundException | InvalidClassException e)
-        {
-            throw new RuntimeException(e);
-        }
-        DiagnosticEventStore<Long> store = inMemoryLogger.getStore(cls);
-
-        return getEventsInternal(store, eventClazz, key, limit, includeKey);
-    }
-
-    public Map<Long, Map<String, Serializable>> getAllEvents()
-    {
-        if (inMemoryLogger == null)
-            return new TreeMap<>();
-
-        TreeMap<Long, Map<String, Serializable>> allEvents = new TreeMap<>();
-
-        for (Map.Entry<Class, DiagnosticEventStore<Long>> entry : inMemoryLogger.stores.entrySet())
-        {
-            DiagnosticEventStore<Long> store = entry.getValue();
-            SortedMap<Long, Map<String, Serializable>> events = getEventsInternal(store, entry.getKey().getName(), 0L, 0, true);
-            allEvents.putAll(events);
-        }
-
-        return allEvents;
-    }
-
-    private SortedMap<Long, Map<String, Serializable>> getEventsInternal(DiagnosticEventStore<Long> store,
-                                                                         String eventClazz,
-                                                                         Long key,
-                                                                         int limit,
-                                                                         boolean includeKey)
-    {
-        NavigableMap<Long, DiagnosticEvent> events = store.scan(key, includeKey ? limit : limit + 1);
-        if (!includeKey && !events.isEmpty()) events = events.tailMap(key, false);
-        TreeMap<Long, Map<String, Serializable>> ret = new TreeMap<>();
-        for (Map.Entry<Long, DiagnosticEvent> entry : events.entrySet())
-        {
-            DiagnosticEvent event = entry.getValue();
-            HashMap<String, Serializable> val = new HashMap<>(event.toMap());
-            val.put("class", event.getClass().getName());
-            val.put("type", event.getType().name());
-            val.put("ts", event.timestamp);
-            val.put("thread", event.threadName);
-            ret.put(entry.getKey(), val);
-        }
-        logger.debug("Returning {} {} events for key {} (limit {}) (includeKey {})", ret.size(), eventClazz, key, limit, includeKey);
-        return ret;
     }
 
     public void enableEventPersistence(String eventClazz)
@@ -343,6 +285,71 @@ public final class DiagnosticEventPersistence
             return new NoOpDiagnosticLogger(Collections.emptyMap());
 
         return FBUtilities.newDiagnosticLogger(options.logger.class_name, options.toMap());
+    }
+
+
+    public SortedMap<Long, Map<String, Serializable>> getEvents(String eventClazz)
+    {
+        return getEvents(eventClazz, 0L, 0, true);
+    }
+
+    public SortedMap<Long, Map<String, Serializable>> getEvents(String eventClazz, Long key, int limit, boolean includeKey)
+    {
+        assert eventClazz != null;
+        assert key != null;
+        assert limit >= 0;
+
+        Class cls;
+        try
+        {
+            cls = getEventClass(eventClazz);
+        }
+        catch (ClassNotFoundException | InvalidClassException e)
+        {
+            throw new RuntimeException(e);
+        }
+
+        return getEventsInternal(inMemoryLogger.getStore(cls), eventClazz, key, limit, includeKey);
+    }
+
+    public Map<Long, Map<String, Serializable>> getAllEvents()
+    {
+        if (inMemoryLogger == null)
+            return new TreeMap<>();
+
+        TreeMap<Long, Map<String, Serializable>> allEvents = new TreeMap<>();
+
+        for (Map.Entry<Class, DiagnosticEventStore<Long>> entry : inMemoryLogger.stores.entrySet())
+        {
+            DiagnosticEventStore<Long> store = entry.getValue();
+            SortedMap<Long, Map<String, Serializable>> events = getEventsInternal(store, entry.getKey().getName(), 0L, 0, true);
+            allEvents.putAll(events);
+        }
+
+        return allEvents;
+    }
+
+    private SortedMap<Long, Map<String, Serializable>> getEventsInternal(DiagnosticEventStore<Long> store,
+                                                                         String eventClazz,
+                                                                         Long key,
+                                                                         int limit,
+                                                                         boolean includeKey)
+    {
+        NavigableMap<Long, DiagnosticEvent> events = store.scan(key, includeKey ? limit : limit + 1);
+        if (!includeKey && !events.isEmpty()) events = events.tailMap(key, false);
+        TreeMap<Long, Map<String, Serializable>> ret = new TreeMap<>();
+        for (Map.Entry<Long, DiagnosticEvent> entry : events.entrySet())
+        {
+            DiagnosticEvent event = entry.getValue();
+            HashMap<String, Serializable> val = new HashMap<>(event.toMap());
+            val.put("class", event.getClass().getName());
+            val.put("type", event.getType().name());
+            val.put("ts", event.timestamp);
+            val.put("thread", event.threadName);
+            ret.put(entry.getKey(), val);
+        }
+        logger.debug("Returning {} {} events for key {} (limit {}) (includeKey {})", ret.size(), eventClazz, key, limit, includeKey);
+        return ret;
     }
 
     private static class InMemoryDiagnosticLogger implements IDiagnosticLogger

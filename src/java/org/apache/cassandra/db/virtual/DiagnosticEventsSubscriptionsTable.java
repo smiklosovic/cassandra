@@ -26,6 +26,7 @@ import java.util.Set;
 
 import org.apache.cassandra.audit.AuditEvent;
 import org.apache.cassandra.audit.AuditLogEntryType;
+import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.guardrails.GuardrailEvent;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.dht.BootstrapEvent;
@@ -70,6 +71,18 @@ public class DiagnosticEventsSubscriptionsTable extends AbstractMutableVirtualTa
     }
 
     @Override
+    public DataSet data(DecoratedKey partitionKey)
+    {
+        SimpleDataSet dataSet = new SimpleDataSet(metadata());
+        String eventClass = UTF8Type.instance.getString(partitionKey.getKey());
+
+        for (Enum<?> entry : DiagnosticEventService.instance().getEventTypesByClass(eventClass))
+            dataSet.row(eventClass, entry.name());
+
+        return dataSet;
+    }
+
+    @Override
     public DataSet data()
     {
         SimpleDataSet dataSet = new SimpleDataSet(metadata());
@@ -85,27 +98,15 @@ public class DiagnosticEventsSubscriptionsTable extends AbstractMutableVirtualTa
     @Override
     protected void applyPartitionDeletion(ColumnValues partitionKey)
     {
-        if (!enabled())
-            return;
-
         String clazz = partitionKey.value(0);
 
-        for (Map.Entry<Class<?>, Set<Enum<?>>> entry : DiagnosticEventService.instance().getAllEventClassesWithTypes().entrySet())
-        {
-            if (entry.getKey().getName().endsWith(clazz))
-            {
-                DiagnosticEventPersistence.instance().disableEventPersistence(entry.getKey().getName());
-                return;
-            }
-        }
+        for (Enum type : DiagnosticEventService.instance().getEventTypesByClass(clazz))
+            DiagnosticEventPersistence.instance().disableEventPersistence(clazz, type);
     }
 
     @Override
     protected void applyRowDeletion(ColumnValues partitionKey, ColumnValues clusteringColumns)
     {
-        if (!enabled())
-            return;
-
         String clazz = partitionKey.value(0);
         String type = clusteringColumns.value(0);
 
@@ -128,18 +129,16 @@ public class DiagnosticEventsSubscriptionsTable extends AbstractMutableVirtualTa
     @Override
     public void truncate()
     {
-        if (!enabled())
-            return;
-
         for (Map.Entry<Class<?>, Set<Enum<?>>> entry : DiagnosticEventService.instance().getAllEventClassesWithTypes().entrySet())
-            DiagnosticEventPersistence.instance().disableEventPersistence(entry.getKey().getName());
+        {
+            for (Enum type : entry.getValue())
+                DiagnosticEventPersistence.instance().disableEventPersistence(entry.getKey().getName(), type);
+        }
     }
 
     @Override
     protected void applyColumnUpdate(ColumnValues partitionKey, ColumnValues clusteringColumns, Optional<ColumnValue> columnValue)
     {
-        if (!enabled())
-            return;
 
         String clazz = partitionKey.value(0);
         String type = clusteringColumns.value(0);
@@ -176,10 +175,5 @@ public class DiagnosticEventsSubscriptionsTable extends AbstractMutableVirtualTa
             for (Enum eventType : eventTypes)
                 DiagnosticEventPersistence.instance().enableEventPersistence(eventClass, eventType);
         }
-    }
-
-    private boolean enabled()
-    {
-        return DiagnosticEventService.instance().isDiagnosticsEnabled();
     }
 }
