@@ -38,6 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.utils.MBeanWrapper;
 import org.apache.cassandra.utils.binlog.BinLogOptions;
 
@@ -497,6 +498,10 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
                         "in order to enable diagnostic logging.");
             return;
         }
+
+        DiagnosticLogOptions diagnosticLogOptions = DatabaseDescriptor.getDiagnosticLoggingOptions();
+        if (archiveCommand != null && !diagnosticLogOptions.allow_nodetool_archive_command)
+            throw new ConfigurationException("Can't enable diagnostic log archiving via nodetool unless diagnostic_logging_options.allow_nodetool_archive_command is set to true");
 
         BinLogOptions binLogOptions = new BinLogOptions.Builder()
         .withMaxArchiveRetries(maxArchiveRetries)
