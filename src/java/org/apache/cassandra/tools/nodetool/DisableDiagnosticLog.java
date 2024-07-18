@@ -19,15 +19,29 @@
 package org.apache.cassandra.tools.nodetool;
 
 import io.airlift.airline.Command;
+import io.airlift.airline.Option;
 import org.apache.cassandra.tools.NodeProbe;
 import org.apache.cassandra.tools.NodeTool;
 
 @Command(name = "disablediagnosticlog", description = "Disable the diagnostic log")
 public class DisableDiagnosticLog extends NodeTool.NodeToolCmd
 {
+    @Option(title = "keep_in_memory_log",
+    name = { "-k", "--keep-in-memory-log" },
+    description = "Keep in-memory diagnostic logger active, disable only persistent logger.")
+    private boolean keepInMemoryLog = false;
+
+    @Option(title = "clean_events",
+    name = { "-c", "--clean"},
+    description = "Clean in-memory event stores. This will also reset last event id's.")
+    private boolean clean = false;
+
     @Override
     protected void execute(NodeProbe probe)
     {
-        probe.disableDiagnosticLog();
+        if (!keepInMemoryLog)
+            probe.disableDiagnosticLog(clean);
+        else
+            probe.disablePersistentDiagnosticLog();
     }
 }

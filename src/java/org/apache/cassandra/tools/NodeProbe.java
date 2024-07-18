@@ -2298,14 +2298,46 @@ public class NodeProbe implements AutoCloseable
         ssProxy.disableAuditLog();
     }
 
-    public void disableDiagnosticLog()
-    {
-        desProxy.disablePersistentDiagnosticLog();
-    }
-
     public boolean isDiagnosticLogEnabled()
     {
+        return desProxy.isDiagnosticsEnabled();
+    }
+
+    public boolean isPersistentDiagnosticLogEnabled()
+    {
         return desProxy.isPersistentDiagnosticLogEnabled();
+    }
+
+    public boolean isInMemoryDiagnosticLogEnabled()
+    {
+        return desProxy.isInMemoryDiagnosticLogEnabled();
+    }
+
+    /**
+     * Disables both in-memory and persistent diagnostic logger.
+     *
+     * @param clean set to true if in-memory events should be removed, false otherwise.
+     */
+    public void disableDiagnosticLog(boolean clean)
+    {
+        desProxy.disableDiagnostics(clean);
+    }
+
+    /**
+     * Disables both in-memory and persistent diagnostic logger.
+     * In-memory events will not be removed.
+     */
+    public void disableDiagnosticLog()
+    {
+        desProxy.disableDiagnostics(false);
+    }
+
+    /**
+     * Stops persistent diagnostic log only, keeps in-memory logger running otherwise.
+     */
+    public void disablePersistentDiagnosticLog()
+    {
+        desProxy.disablePersistentDiagnosticLog();
     }
 
     public void enableAuditLog(String loggerName, Map<String, String> parameters, String includedKeyspaces, String excludedKeyspaces,
@@ -2328,8 +2360,23 @@ public class NodeProbe implements AutoCloseable
                                maxArchiveRetries, block, rollCycle, maxLogSize, maxQueueWeight, archiveCommand);
     }
 
-    public void enableDiagnosticLog(String loggerName, Map<String, String> parameters, Integer maxArchiveRetries, Boolean block, String rollCycle,
-                                    Long maxLogSize, Integer maxQueueWeight, String archiveCommand)
+    public void enableDiagnostics(boolean withPersistentLog)
+    {
+        desProxy.enableDiagnostics(withPersistentLog);
+    }
+
+    public void enableDiagnostics()
+    {
+        desProxy.enableDiagnostics(true);
+    }
+
+    public void enablePersistentDiagnosticLog()
+    {
+        desProxy.enablePersistentDiagnosticLog();
+    }
+
+    public void enablePersistentDiagnosticLog(String loggerName, Map<String, String> parameters, Integer maxArchiveRetries, Boolean block, String rollCycle,
+                                              Long maxLogSize, Integer maxQueueWeight, String archiveCommand)
     {
         desProxy.enablePersistentDiagnosticLog(loggerName, parameters, maxArchiveRetries, block, rollCycle, maxLogSize, maxQueueWeight, archiveCommand);
     }

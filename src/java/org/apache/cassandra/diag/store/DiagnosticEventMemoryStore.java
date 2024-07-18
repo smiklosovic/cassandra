@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.diag.DiagnosticEvent;
 import org.apache.cassandra.diag.LastEventIdBroadcaster;
 
@@ -40,7 +41,7 @@ public final class DiagnosticEventMemoryStore implements DiagnosticEventStore<Lo
 {
     private final AtomicLong lastKey = new AtomicLong(0);
 
-    private int maxSize = 200;
+    private int maxSize = DatabaseDescriptor.getDiagnosticEventClassCapacity();
 
     // event access will mostly happen based on a recent event offset, so we add new events to the head of the list
     // for optimized search times

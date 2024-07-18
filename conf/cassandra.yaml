@@ -1869,7 +1869,7 @@ audit_logging_options:
 diagnostic_events_enabled: true
 
 diagnostic_logging_options:
-     enabled: true
+     enabled: false
      logger:
       - class_name: BinDiagnosticLogger
      diagnostic_log_dir: /tmp/diagnostics

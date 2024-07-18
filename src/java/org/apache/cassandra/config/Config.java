@@ -700,6 +700,10 @@ public class Config
 
     public CorruptedTombstoneStrategy corrupted_tombstone_strategy = CorruptedTombstoneStrategy.disabled;
 
+    /**
+     * Maximum number of in-memory events per event class
+     */
+    public volatile int diagnostic_event_class_capacity = 200;
     public volatile boolean diagnostic_events_enabled = false;
 
     // Default keyspace replication factors allow validation of newly created keyspaces

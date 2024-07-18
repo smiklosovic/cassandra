@@ -42,16 +42,33 @@ public interface DiagnosticEventServiceMBean
      * <p>
      * Calling of this method will disable diagnostic logger, if any is active, and it will stop in-memory
      * diagnostic logging as well.
+     *
+     * @param clean set to true if in-memory events should be removed, false otherwise.
+     */
+    void disableDiagnostics(boolean clean);
+
+    /**
+     * Kill switch for disabling all events immediately, without restarting the node. Please edit cassandra.yaml for
+     * making this permanent.
+     * <p>
+     * Calling of this method will disable diagnostic logger, if any is active, and it will stop in-memory
+     * diagnostic logging as well.
      */
     void disableDiagnostics();
 
     /**
      * Enabling of diagnostic framework without restarting the node.
      * <p>
-     * Calling of this method will start in-memory diagnostic logger and it will start persistent diagnostic logger,
+     * Calling of this method will start in-memory diagnostic logger, and it will start persistent diagnostic logger,
      * if any is enabled.
      */
     void enableDiagnostics();
+
+    /**
+     *
+     * @param withPersistentLog
+     */
+    void enableDiagnostics(boolean withPersistentLog);
 
     /**
      * Retrieved all events of specified type starting with provided key. Result will be sorted chronologically.
@@ -86,6 +103,10 @@ public interface DiagnosticEventServiceMBean
     void disablePersistentDiagnosticLog();
 
     boolean isPersistentDiagnosticLogEnabled();
+
+    boolean isInMemoryDiagnosticLogEnabled();
+
+    int getDiagnosticEventClassCapacity();
 
     CompositeData getDiagnosticLogOptionsData();
 }

@@ -4288,6 +4288,11 @@ public class DatabaseDescriptor
         return unsafeSystem;
     }
 
+    public static int getDiagnosticEventClassCapacity()
+    {
+        return conf.diagnostic_event_class_capacity;
+    }
+
     public static boolean diagnosticEventsEnabled()
     {
         return conf.diagnostic_events_enabled;

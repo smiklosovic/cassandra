@@ -19,7 +19,6 @@
 package org.apache.cassandra.tools.nodetool;
 
 import io.airlift.airline.Command;
-import org.apache.cassandra.diag.DiagnosticEventServiceMBean;
 import org.apache.cassandra.diag.DiagnosticLogOptions;
 import org.apache.cassandra.tools.NodeProbe;
 import org.apache.cassandra.tools.NodeTool;
@@ -33,8 +32,10 @@ public class GetDiagnosticLog extends NodeTool.NodeToolCmd
     {
         final TableBuilder tableBuilder = new TableBuilder();
 
-        DiagnosticEventServiceMBean proxy = probe.getDiagnosticEventServiceProxy();
-        tableBuilder.add("enabled", Boolean.toString(proxy.isPersistentDiagnosticLogEnabled()));
+        tableBuilder.add("enabled", Boolean.toString(probe.isDiagnosticLogEnabled()));
+        tableBuilder.add("memory_enabled", Boolean.toString(probe.isInMemoryDiagnosticLogEnabled()));
+        tableBuilder.add("persistent_enabled", Boolean.toString(probe.isPersistentDiagnosticLogEnabled()));
+        tableBuilder.add("event_class_capacity", Integer.toString(probe.getDiagnosticEventServiceProxy().getDiagnosticEventClassCapacity()));
 
         final DiagnosticLogOptions options = probe.getDiagnosticLogOptions();
         tableBuilder.add("logger", options.logger.class_name);

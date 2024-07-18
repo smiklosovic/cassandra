@@ -52,7 +52,7 @@ public final class DiagnosticEventPersistence
 
     private static final DiagnosticEventPersistence instance = new DiagnosticEventPersistence();
 
-    private volatile InMemoryDiagnosticLogger inMemoryLogger;
+    private final InMemoryDiagnosticLogger inMemoryLogger = new InMemoryDiagnosticLogger();
     private volatile DiagnosticLogOptions diagnosticLogOptions;
     private volatile IDiagnosticLogger diagnosticLogger;
     private final Collection<Consumer<DiagnosticEvent>> consumers = new HashSet<>();
@@ -63,7 +63,6 @@ public final class DiagnosticEventPersistence
         if (initialized || !DatabaseDescriptor.diagnosticEventsEnabled())
             return;
 
-        inMemoryLogger = new InMemoryDiagnosticLogger();
         consumers.add(inMemoryLogger);
         diagnosticLogOptions = DatabaseDescriptor.getDiagnosticLoggingOptions();
 
@@ -99,7 +98,12 @@ public final class DiagnosticEventPersistence
 
     public synchronized void disableDiagnosticLog()
     {
-//        Map<Class, Set<Enum<?>>> previousSubscriptions = new HashMap<>();
+        disableDiagnosticLog(false);
+    }
+
+    public synchronized void disableDiagnosticLog(boolean clean)
+    {
+        //        Map<Class, Set<Enum<?>>> previousSubscriptions = new HashMap<>();
 //
 //        for (Map.Entry<Class, ImmutableSetMultimap<Enum<?>, Consumer<DiagnosticEvent>>> entry : DiagnosticEventService.instance().getSubscribesByClassAndType().entrySet())
 //        {
@@ -116,13 +120,19 @@ public final class DiagnosticEventPersistence
 //        }
 //
 //        this.previousSubscriptions = previousSubscriptions;
-        inMemoryLogger.stop();
+
+        unsubscribeLogger(inMemoryLogger);
+
+        if (clean)
+            inMemoryLogger.stop();
+
         consumers.remove(inMemoryLogger);
     }
 
     public synchronized void enableDiagnosticLog()
     {
-        consumers.add(inMemoryLogger);
+        if (!consumers.contains(inMemoryLogger))
+            consumers.add(inMemoryLogger);
 
 //        for (Map.Entry<Class, Set<Enum<?>>> entry : previousSubscriptions.entrySet())
 //        {
@@ -140,7 +150,7 @@ public final class DiagnosticEventPersistence
         diagnosticLogger.stop();
         consumers.remove(diagnosticLogger);
         diagnosticLogger = null;
-        diagnosticLogOptions.enabled = false;
+        diagnosticLogOptions = null;
     }
 
     public synchronized DiagnosticLogOptions getDiagnosticLogOptions()
@@ -182,6 +192,11 @@ public final class DiagnosticEventPersistence
     public boolean isPersistentDiagnosticLogEnabled()
     {
         return diagnosticLogger != null && diagnosticLogger.isEnabled() && consumers.contains(diagnosticLogger);
+    }
+
+    public boolean isInMemoryDiagnosticsEnabled()
+    {
+        return consumers.contains(inMemoryLogger);
     }
 
     public void enableEventPersistence(String eventClazz)

@@ -232,6 +232,16 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
             unsubscribe(event, type, consumer);
     }
 
+    /**
+     * Removes all active subscribers.
+     */
+    public synchronized void unsubscribeAll()
+    {
+        subscribersByClass = ImmutableSetMultimap.of();
+        subscribersAll = ImmutableSet.of();
+        subscribersByClassAndType = ImmutableMap.of();
+    }
+
     private <E extends DiagnosticEvent>  ImmutableSetMultimap<Class<? extends DiagnosticEvent>, Consumer<DiagnosticEvent>> removeByClass(@Nullable Class<E> event, Consumer<E> consumer)
     {
         // event class
@@ -373,60 +383,93 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
         return instance;
     }
 
-    /**
-     * Removes all active subscribers.
-     */
-    public synchronized void cleanup()
-    {
-        subscribersByClass = ImmutableSetMultimap.of();
-        subscribersAll = ImmutableSet.of();
-        subscribersByClassAndType = ImmutableMap.of();
-    }
-
+    @Override
     public boolean isDiagnosticsEnabled()
     {
         return DatabaseDescriptor.diagnosticEventsEnabled();
     }
 
+    @Override
+    public void disableDiagnostics(boolean clean)
+    {
+        DiagnosticEventPersistence.instance().disableDiagnosticLog(clean);
+        disablePersistentDiagnosticLog();
+    }
+
+    @Override
     public void disableDiagnostics()
     {
-        if (!isDiagnosticsEnabled())
-            return;
-
-        DatabaseDescriptor.setDiagnosticEventsEnabled(false);
-        DiagnosticEventPersistence.instance().disableDiagnosticLog();
-        disablePersistentDiagnosticLog();
-        cleanup();
+        disableDiagnostics(false);
     }
 
+    @Override
+    public void enableDiagnostics(boolean withPersistentLog)
+    {
+        if (!DatabaseDescriptor.diagnosticEventsEnabled())
+        {
+            logger.info("Diagnostic events are disabled in cassandra.yaml. You have to enable this feature " +
+                        "in order to enable diagnostic logging.");
+            return;
+        }
+
+        DiagnosticEventPersistence.instance().enableDiagnosticLog();
+
+        DiagnosticLogOptions diagnosticLoggingOptions = DatabaseDescriptor.getDiagnosticLoggingOptions();
+
+        if (withPersistentLog && diagnosticLoggingOptions.enabled)
+            enablePersistentDiagnosticLog();
+    }
+
+    @Override
     public void enableDiagnostics()
     {
-        if (isDiagnosticsEnabled())
+        if (!DatabaseDescriptor.diagnosticEventsEnabled())
+        {
+            logger.info("Diagnostic events are disabled in cassandra.yaml. You have to enable this feature " +
+                        "in order to enable diagnostic logging.");
             return;
+        }
 
-        DatabaseDescriptor.setDiagnosticEventsEnabled(true);
         DiagnosticEventPersistence.instance().enableDiagnosticLog();
-        enablePersistentDiagnosticLog();
+
+        if (DatabaseDescriptor.getDiagnosticLoggingOptions().enabled)
+            enablePersistentDiagnosticLog();
     }
 
+    @Override
     public SortedMap<Long, Map<String, Serializable>> readEvents(String eventClazz, Long lastKey, int limit)
     {
         return DiagnosticEventPersistence.instance().getEvents(eventClazz, lastKey, limit, false);
     }
 
+    @Override
     public void enableEventPersistence(String eventClazz)
     {
         DiagnosticEventPersistence.instance().enableEventPersistence(eventClazz);
     }
 
+    @Override
     public void disableEventPersistence(String eventClazz)
     {
         DiagnosticEventPersistence.instance().disableEventPersistence(eventClazz);
     }
 
+    @Override
     public boolean isPersistentDiagnosticLogEnabled()
     {
         return DiagnosticEventPersistence.instance().isPersistentDiagnosticLogEnabled();
+    }
+
+    @Override
+    public boolean isInMemoryDiagnosticLogEnabled()
+    {
+        return DiagnosticEventPersistence.instance().isInMemoryDiagnosticsEnabled();
+    }
+
+    @Override
+    public int getDiagnosticEventClassCapacity()
+    {
+        return DatabaseDescriptor.getDiagnosticEventClassCapacity();
     }
 
     @Override
@@ -435,6 +478,7 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
         return DiagnosticLogOptionsCompositeData.toCompositeData(DiagnosticEventPersistence.instance().getDiagnosticLogOptions());
     }
 
+    @Override
     public void enablePersistentDiagnosticLog()
     {
         DiagnosticLogOptions options = DatabaseDescriptor.getDiagnosticLoggingOptions();
@@ -443,6 +487,7 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
                                       options.archive_command);
     }
 
+    @Override
     public void enablePersistentDiagnosticLog(String loggerName, Map<String, String> parameters, Integer maxArchiveRetries, Boolean block, String rollCycle,
                                               Long maxLogSize, Integer maxQueueWeight, String archiveCommand)
     {
@@ -471,6 +516,7 @@ public final class DiagnosticEventService implements DiagnosticEventServiceMBean
         logger.info("Diagnostic logger is enabled with configuration: {}", options);
     }
 
+    @Override
     public void disablePersistentDiagnosticLog()
     {
         DiagnosticEventPersistence.instance().disablePersistentDiagnosticLog();
