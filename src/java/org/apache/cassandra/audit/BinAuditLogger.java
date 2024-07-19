@@ -20,56 +20,27 @@ package org.apache.cassandra.audit;
 import java.util.Map;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.primitives.Ints;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.openhft.chronicle.wire.WireOut;
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.util.File;
-import org.apache.cassandra.utils.ObjectSizes;
+import org.apache.cassandra.log.AbstractBinLogger;
 import org.apache.cassandra.utils.binlog.BinLog;
-import org.apache.cassandra.utils.concurrent.WeightedQueue;
 
-import static org.apache.cassandra.audit.AuditLogEntry.DEFAULT_FIELD_SEPARATOR;
-import static org.apache.cassandra.audit.AuditLogEntry.DEFAULT_KEY_VALUE_SEPARATOR;
-
-public class BinAuditLogger implements IAuditLogger
+public class BinAuditLogger extends AbstractBinLogger<AuditLogEntry> implements IAuditLogger
 {
+    protected static final Logger logger = LoggerFactory.getLogger(BinAuditLogger.class);
+
     public static final long CURRENT_VERSION = 0;
     public static final String AUDITLOG_TYPE = "audit";
     public static final String AUDITLOG_MESSAGE = "message";
-    private static final Logger logger = LoggerFactory.getLogger(BinAuditLogger.class);
 
-    private final String keyValueSeparator;
-    private final String fieldSeparator;
-
-    private volatile BinLog binLog;
-
-    public BinAuditLogger(AuditLogOptions auditLoggingOptions)
+    public BinAuditLogger(Map<String, String> options)
     {
-        this(auditLoggingOptions, DEFAULT_KEY_VALUE_SEPARATOR, DEFAULT_FIELD_SEPARATOR);
-    }
-
-    public BinAuditLogger(Map<String, String> params)
-    {
-        this(DatabaseDescriptor.getAuditLoggingOptions(),
-             getFromParamsOrDefault(params, "key_value_separator", DEFAULT_KEY_VALUE_SEPARATOR),
-             getFromParamsOrDefault(params, "field_separator", DEFAULT_FIELD_SEPARATOR));
-    }
-
-    BinAuditLogger(AuditLogOptions auditLoggingOptions, String keyValueSeparator, String fieldSeparator)
-    {
-        this.binLog = new BinLog.Builder().path(File.getPath(auditLoggingOptions.audit_logs_dir))
-                                          .rollCycle(auditLoggingOptions.roll_cycle)
-                                          .blocking(auditLoggingOptions.block)
-                                          .maxQueueWeight(auditLoggingOptions.max_queue_weight)
-                                          .maxLogSize(auditLoggingOptions.max_log_size)
-                                          .archiveCommand(auditLoggingOptions.archive_command)
-                                          .maxArchiveRetries(auditLoggingOptions.max_archive_retries)
-                                          .build(false);
-        this.keyValueSeparator = keyValueSeparator;
-        this.fieldSeparator = fieldSeparator;
+        super(options);
+        AuditLogOptions auditLogOptions = AuditLogOptions.fromMap(options);
+        this.binLog = new BinLog.Builder(auditLogOptions).path(File.getPath(auditLogOptions.audit_logs_dir)).build(false);
     }
 
     /**
@@ -99,44 +70,31 @@ public class BinAuditLogger implements IAuditLogger
     }
 
     @Override
-    public void log(AuditLogEntry auditLogEntry)
+    public void log(AuditLogEntry logEntry)
     {
         BinLog binLog = this.binLog;
-        if (binLog == null || auditLogEntry == null)
+        if (binLog == null || logEntry == null)
         {
             return;
         }
-        binLog.logRecord(new Message(auditLogEntry.getLogString(keyValueSeparator, fieldSeparator)));
+        binLog.logRecord(new Message(logEntry.getLogString(getKeyValueSeparator(), getFieldSeparator())));
     }
-
-    static String getFromParamsOrDefault(Map<String, String> params, String key, String defaultValue)
-    {
-        return params != null
-               ? params.getOrDefault(key, defaultValue)
-               : defaultValue;
-    }
-
 
     @VisibleForTesting
-    public static class Message extends BinLog.ReleaseableWriteMarshallable implements WeightedQueue.Weighable
+    public static class Message extends AbstractMessage
     {
-        /**
-         * The shallow size of a {@code Message} object.
-         */
-        private static final long EMPTY_SIZE = ObjectSizes.measure(new Message(""));
-
-        private final String message;
-
         public Message(String message)
         {
-            this.message = message;
+            super(message);
         }
 
+        @Override
         protected long version()
         {
             return CURRENT_VERSION;
         }
 
+        @Override
         protected String type()
         {
             return AUDITLOG_TYPE;
@@ -146,18 +104,6 @@ public class BinAuditLogger implements IAuditLogger
         public void writeMarshallablePayload(WireOut wire)
         {
             wire.write(AUDITLOG_MESSAGE).text(message);
-        }
-
-        @Override
-        public void release()
-        {
-
-        }
-
-        @Override
-        public int weight()
-        {
-            return Ints.checkedCast(EMPTY_SIZE + ObjectSizes.sizeOf(message));
         }
     }
 }

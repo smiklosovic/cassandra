@@ -119,16 +119,35 @@ appender reference in the root level section below.
     </filter>
   </appender> -->
 
-  <root level="INFO">
-    <appender-ref ref="SYSTEMLOG" />
-    <appender-ref ref="STDOUT" />
-    <appender-ref ref="ASYNCDEBUGLOG" /> <!-- Comment this line to disable debug.log -->
+  <appender name="DIAGLOG" class="org.apache.cassandra.diag.PlainTextDiagnosticLogger">
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>DEBUG</level>
+    </filter>
+    <file>${cassandra.logdir}/diagnostics/diag.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <!-- rollover daily -->
+      <fileNamePattern>${cassandra.logdir}/audit/audit.log.%d{yyyy-MM-dd}.%i.zip</fileNamePattern>
+      <!-- each file should be at most 50MB, keep 30 days worth of history, but at most 5GB -->
+      <maxFileSize>50MB</maxFileSize>
+      <maxHistory>30</maxHistory>
+      <totalSizeCap>5GB</totalSizeCap>
+    </rollingPolicy>
+    <encoder>
+      <pattern>%date{ISO8601} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+<root level="DEBUG">
+  <appender-ref ref="SYSTEMLOG" />
+  <appender-ref ref="STDOUT" />
+  <appender-ref ref="ASYNCDEBUGLOG" /> <!-- Comment this line to disable debug.log -->
     <!--
     <appender-ref ref="LogbackMetrics" />
     -->
     <!--
     <appender-ref ref="CQLLOG"/>
     -->
+    <appender-ref ref="DIAGLOG"/>
   </root>
 
   <logger name="org.apache.cassandra" level="DEBUG"/>

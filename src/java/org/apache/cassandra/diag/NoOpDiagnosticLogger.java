@@ -16,10 +16,37 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.audit;
+package org.apache.cassandra.diag;
 
-import org.apache.cassandra.log.ILogger;
+import java.util.Map;
+import java.util.Optional;
 
-public interface IAuditLogger extends ILogger<AuditLogEntry>
+public class NoOpDiagnosticLogger implements IDiagnosticLogger
 {
+    public NoOpDiagnosticLogger(Map<String, String> options)
+    {
+    }
+
+    @Override
+    public boolean isEnabled()
+    {
+        return false;
+    }
+
+    @Override
+    public void stop()
+    {
+        DiagnosticEventService.instance().unsubscribe(this);
+    }
+
+    @Override
+    public void accept(DiagnosticEvent diagnosticEvent)
+    {
+    }
+
+    @Override
+    public Optional<DiagnosticLogOptions> getDiagnosticLogOptions()
+    {
+        return Optional.empty();
+    }
 }

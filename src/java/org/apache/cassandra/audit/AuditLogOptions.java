@@ -18,14 +18,9 @@
 package org.apache.cassandra.audit;
 
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
-import com.google.common.base.Strings;
 import org.apache.commons.lang3.StringUtils;
 
 import org.apache.cassandra.config.CassandraRelevantProperties;
@@ -35,6 +30,7 @@ import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.utils.binlog.BinLogOptions;
 
 import static org.apache.cassandra.utils.LocalizeString.toUpperCaseLocalized;
+import static org.apache.cassandra.utils.binlog.BinLogOptions.Builder.sanitise;
 
 public class AuditLogOptions extends BinLogOptions
 {
@@ -47,15 +43,19 @@ public class AuditLogOptions extends BinLogOptions
     public String excluded_categories = StringUtils.EMPTY;
     public String included_users = StringUtils.EMPTY;
     public String excluded_users = StringUtils.EMPTY;
-
     public String audit_logs_dir;
 
     public AuditLogOptions()
     {
+        audit_logs_dir = getDefaultAuditLogsDir();
+    }
+
+    private static String getDefaultAuditLogsDir()
+    {
         String auditLogDir = CassandraRelevantProperties.LOG_DIR_AUDIT.getString();
         String logDir = CassandraRelevantProperties.LOG_DIR.getString() + "/audit";
         Path path = auditLogDir == null ? File.getPath(logDir) : File.getPath(auditLogDir);
-        audit_logs_dir = path.normalize().toString();
+        return path.normalize().toString();
     }
 
     public static AuditLogOptions validate(final AuditLogOptions options) throws ConfigurationException
@@ -72,6 +72,38 @@ public class AuditLogOptions extends BinLogOptions
         return options;
     }
 
+    public static AuditLogOptions fromMap(Map<String, String> options)
+    {
+        AuditLogOptions auditLogOptions = new AuditLogOptions();
+        auditLogOptions.enabled = Boolean.parseBoolean(options.getOrDefault("enabled", Boolean.FALSE.toString()));
+        auditLogOptions.included_keyspaces = options.getOrDefault("included_keyspaces", StringUtils.EMPTY);
+        auditLogOptions.excluded_keyspaces = options.getOrDefault("excluded_keyspaces", "system,system_schema,system_virtual_schema");
+        auditLogOptions.included_categories = options.getOrDefault("included_categories", StringUtils.EMPTY);
+        auditLogOptions.excluded_categories = options.getOrDefault("excluded_categories", StringUtils.EMPTY);;
+        auditLogOptions.included_users = options.getOrDefault("included_users", StringUtils.EMPTY);
+        auditLogOptions.excluded_users = options.getOrDefault("excluded_users", StringUtils.EMPTY);
+        auditLogOptions.audit_logs_dir = options.getOrDefault("audit_logs_dir", getDefaultAuditLogsDir());
+        return new Builder(BinLogOptions.fromMap(options), auditLogOptions).build();
+    }
+
+    public Map<String, String> toMap()
+    {
+        Map<String, String> map = super.toMap();
+        map.put("enabled", Boolean.toString(enabled));
+        map.put("included_keyspaces", included_keyspaces);
+        map.put("excluded_keyspaces", excluded_keyspaces);
+        map.put("included_categories", included_categories);
+        map.put("excluded_categories", excluded_categories);
+        map.put("included_users", included_users);
+        map.put("excluded_users", excluded_users);
+        map.put("audit_logs_dir", audit_logs_dir);
+
+        if (logger != null && logger.parameters != null)
+            map.putAll(logger.parameters);
+
+        return map;
+    }
+
     public static class Builder
     {
         private boolean enabled;
@@ -83,35 +115,30 @@ public class AuditLogOptions extends BinLogOptions
         private String includedUsers;
         private String excludedUsers;
         private String auditLogDir;
-        private int maxQueueWeight;
-        private int maxArchiveRetries;
-        private String rollCycle;
-        private String archiveCommand;
-        private boolean block;
-        private long maxLogSize;
+        private final BinLogOptions binLogOptions;
 
         public Builder()
         {
             this(new AuditLogOptions());
         }
 
+        public Builder(final BinLogOptions opts, final AuditLogOptions auditLogOptions)
+        {
+            this.binLogOptions = new BinLogOptions.Builder(opts).build();
+            this.enabled = auditLogOptions.enabled;
+            this.logger = auditLogOptions.logger;
+            this.includedKeyspaces = auditLogOptions.included_keyspaces;
+            this.excludedKeyspaces = auditLogOptions.excluded_keyspaces;
+            this.includedCategories = auditLogOptions.included_categories;
+            this.excludedCategories = auditLogOptions.excluded_categories;
+            this.includedUsers = auditLogOptions.included_users;
+            this.excludedUsers = auditLogOptions.excluded_users;
+            this.auditLogDir = auditLogOptions.audit_logs_dir;
+        }
+
         public Builder(final AuditLogOptions opts)
         {
-            this.enabled = opts.enabled;
-            this.logger = opts.logger;
-            this.includedKeyspaces = opts.included_keyspaces;
-            this.excludedKeyspaces = opts.excluded_keyspaces;
-            this.includedCategories = opts.included_categories;
-            this.excludedCategories = opts.excluded_categories;
-            this.includedUsers = opts.included_users;
-            this.excludedUsers = opts.excluded_users;
-            this.auditLogDir = opts.audit_logs_dir;
-            this.maxQueueWeight = opts.max_queue_weight;
-            this.maxArchiveRetries = opts.max_archive_retries;
-            this.rollCycle = opts.roll_cycle;
-            this.archiveCommand = opts.archive_command;
-            this.block = opts.block;
-            this.maxLogSize = opts.max_log_size;
+            this(opts, opts);
         }
 
         public Builder withEnabled(boolean enabled)
@@ -122,7 +149,6 @@ public class AuditLogOptions extends BinLogOptions
 
         public Builder withLogger(final String loggerName, Map<String, String> parameters)
         {
-
             if (loggerName != null && !loggerName.trim().isEmpty())
             {
                 this.logger = new ParameterizedClass(loggerName.trim(), parameters);
@@ -175,7 +201,7 @@ public class AuditLogOptions extends BinLogOptions
 
         public Builder withRollCycle(final String rollCycle)
         {
-            sanitise(rollCycle).map(v -> this.rollCycle = toUpperCaseLocalized(v));
+            sanitise(rollCycle).map(v -> this.binLogOptions.roll_cycle = toUpperCaseLocalized(v));
             return this;
         }
 
@@ -183,7 +209,7 @@ public class AuditLogOptions extends BinLogOptions
         {
             if (archiveCommand != null)
             {
-                this.archiveCommand = archiveCommand;
+                this.binLogOptions.archive_command = archiveCommand;
             }
             return this;
         }
@@ -192,7 +218,7 @@ public class AuditLogOptions extends BinLogOptions
         {
             if (block != null)
             {
-                this.block = block;
+                this.binLogOptions.block = block;
             }
             return this;
         }
@@ -201,7 +227,7 @@ public class AuditLogOptions extends BinLogOptions
         {
             if (maxLogSize != Long.MIN_VALUE)
             {
-                this.maxLogSize = maxLogSize;
+                this.binLogOptions.max_log_size = maxLogSize;
             }
             return this;
         }
@@ -210,7 +236,7 @@ public class AuditLogOptions extends BinLogOptions
         {
             if (maxArchiveRetries != Integer.MIN_VALUE)
             {
-                this.maxArchiveRetries = maxArchiveRetries;
+                this.binLogOptions.max_archive_retries = maxArchiveRetries;
             }
             return this;
         }
@@ -219,7 +245,7 @@ public class AuditLogOptions extends BinLogOptions
         {
             if (maxQueueWeight != Integer.MIN_VALUE)
             {
-                this.maxQueueWeight = maxQueueWeight;
+                this.binLogOptions.max_queue_weight = maxQueueWeight;
             }
             return this;
         }
@@ -227,7 +253,6 @@ public class AuditLogOptions extends BinLogOptions
         public AuditLogOptions build()
         {
             final AuditLogOptions opts = new AuditLogOptions();
-
             opts.enabled = this.enabled;
             opts.logger = this.logger;
             sanitise(this.includedKeyspaces).map(v -> opts.included_keyspaces = v);
@@ -236,29 +261,19 @@ public class AuditLogOptions extends BinLogOptions
             sanitise(this.excludedCategories).map(v -> opts.excluded_categories = toUpperCaseLocalized(v));
             sanitise(this.includedUsers).map(v -> opts.included_users = v);
             sanitise(this.excludedUsers).map(v -> opts.excluded_users = v);
-            opts.roll_cycle = this.rollCycle;
             opts.audit_logs_dir = this.auditLogDir;
-            opts.max_queue_weight = this.maxQueueWeight;
-            opts.max_archive_retries = this.maxArchiveRetries;
-            opts.archive_command = this.archiveCommand;
-            opts.block = this.block;
-            opts.max_log_size = this.maxLogSize;
+            opts.roll_cycle = binLogOptions.roll_cycle;
+            opts.max_queue_weight = binLogOptions.max_queue_weight;
+            opts.max_archive_retries = binLogOptions.max_archive_retries;
+            opts.archive_command = binLogOptions.archive_command;
+            opts.block = binLogOptions.block;
+            opts.max_log_size = binLogOptions.max_log_size;
+            opts.key_value_separator = binLogOptions.key_value_separator;
+            opts.field_separator = binLogOptions.field_separator;
 
             AuditLogOptions.validate(opts);
 
             return opts;
-        }
-
-        private static Optional<String> sanitise(final String input)
-        {
-            if (input == null || input.trim().isEmpty())
-                return Optional.empty();
-
-            return Optional.of(Arrays.stream(input.split(","))
-                                     .map(String::trim)
-                                     .map(Strings::emptyToNull)
-                                     .filter(Objects::nonNull)
-                                     .collect(Collectors.joining(",")));
         }
     }
 
@@ -303,6 +318,8 @@ public class AuditLogOptions extends BinLogOptions
                ", max_queue_weight=" + max_queue_weight +
                ", max_log_size=" + max_log_size +
                ", max_archive_retries=" + max_archive_retries +
+               ", key_value_separator=" + key_value_separator +
+               ", field_separator=" + field_separator +
                '}';
     }
 }
