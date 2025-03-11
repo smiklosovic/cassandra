@@ -163,7 +163,7 @@ public class OverlapsTest
             for (int j = 0; j < size; ++j)
             {
                 int start = rand.nextInt(range);
-                input[j] = (new Interval<>(start, start + 1 + random.nextInt(range - start), Character.toString(c++)));
+                input[j] = (Interval.create(start, start + 1 + random.nextInt(range - start), Character.toString(c++)));
             }
 
             boolean endInclusive = rand.nextBoolean();
@@ -315,7 +315,7 @@ public class OverlapsTest
             for (int j = 0; j < size; ++j)
             {
                 int start = rand.nextInt(range);
-                input[j] = (new Interval<>(start, start + 1 + random.nextInt(range - start), Character.toString(c++)));
+                input[j] = (Interval.create(start, start + 1 + random.nextInt(range - start), Character.toString(c++)));
             }
 
             List<Set<Interval<Integer, String>>> overlaps = Overlaps.constructOverlapSets(Arrays.asList(input),

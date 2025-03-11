@@ -21,7 +21,7 @@ import com.google.common.base.Objects;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-public class Interval<C, D>
+public abstract class Interval<C, D>
 {
     public final C min;
     public final C max;
@@ -36,26 +36,93 @@ public class Interval<C, D>
         this.data = data;
     }
 
-    public static <C, D> Interval<C, D> create(C min, C max)
+    public static <C, D> Interval<C, D> create(C min, C max, boolean minInclusive, boolean maxInclusive)
     {
-        return create(min, max, null);
+        return create(min, max, minInclusive, maxInclusive, null);
     }
 
     public static <C, D> Interval<C, D> create(C min, C max, D data)
     {
-        return new Interval(min, max, data);
+        return create(min, max, true, true, data);
     }
+
+    public static <C, D> Interval<C, D> create(C min, C max)
+    {
+        return create(min, max, true, true);
+    }
+
+    public static <C, D> Interval<C, D> create(C min, C max, boolean minInclusive, boolean maxInclusive, D data)
+    {
+        if (minInclusive)
+            return maxInclusive ? new BothInclusiveInterval<>(min, max, data) : new MaxExclusiveInterval<>(min, max, data);
+        else
+            return maxInclusive ? new MinExclusiveInterval<>(min, max, data) : new BothExclusiveInterval<>(min, max, data);
+    }
+
+    private static class BothInclusiveInterval<C, D> extends Interval<C, D>
+    {
+
+        public BothInclusiveInterval(C min, C max, D data) { super(min, max, data); }
+
+        @Override
+        public boolean isMinExclusive() { return false; }
+
+        @Override
+        public boolean isMaxExclusive() { return false; }
+    }
+
+    private static class BothExclusiveInterval<C, D> extends Interval<C, D>
+    {
+        public BothExclusiveInterval(C min, C max, D data) { super(min, max, data); }
+
+        @Override
+        public boolean isMinExclusive() { return true; }
+
+        @Override
+        public boolean isMaxExclusive() { return true;}
+    }
+
+    private static class MinExclusiveInterval<C, D> extends Interval<C, D>
+    {
+        public MinExclusiveInterval(C min, C max, D data) { super (min, max, data); }
+
+        @Override
+        public boolean isMinExclusive() { return true; }
+
+        @Override
+        public boolean isMaxExclusive() { return false; }
+    }
+
+    private static class MaxExclusiveInterval<C, D> extends Interval<C, D>
+    {
+        public MaxExclusiveInterval(C min, C max, D data) { super(min, max, data); }
+
+        @Override
+        public boolean isMinExclusive() { return false; }
+
+        @Override
+        public boolean isMaxExclusive() { return true; }
+    }
+
+    public abstract boolean isMinExclusive();
+
+    public abstract boolean isMaxExclusive();
 
     @Override
     public String toString()
     {
-        return String.format("[%s, %s]%s", min, max, data == null ? "" : (String.format("(%s)", data)));
+        return String.format("%s%s, %s%s%s",
+                             isMinExclusive() ? '(' : '[',
+                             min,
+                             max,
+                             isMaxExclusive() ? ')' : ']',
+                             data == null ? "" : (String.format("(%s)", data)));
     }
 
     @Override
     public final int hashCode()
     {
-        return Objects.hashCode(min, max, data);
+        return Objects.hashCode(min, isMinExclusive(), max, isMaxExclusive(), data);
     }
 
     @Override
@@ -66,7 +133,11 @@ public class Interval<C, D>
 
         Interval that = (Interval)o;
         // handles nulls properly
-        return Objects.equal(min, that.min) && Objects.equal(max, that.max) && Objects.equal(data, that.data);
+        return Objects.equal(min, that.min) &&
+               Objects.equal(max, that.max) &&
+               Objects.equal(data, that.data) &&
+               Objects.equal(isMinExclusive(), that.isMinExclusive()) &&
+               Objects.equal(isMaxExclusive(), that.isMaxExclusive());
     }
 
     private static final AsymmetricOrdering<Interval<Comparable, Comparable>, Comparable> minOrdering

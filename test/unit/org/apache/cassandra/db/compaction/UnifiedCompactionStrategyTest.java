@@ -1052,7 +1052,7 @@ public class UnifiedCompactionStrategyTest
         when(ret.getMinTimestamp()).thenReturn(timestamp);
         when(ret.getFirst()).thenReturn(first);
         when(ret.getLast()).thenReturn(last);
-        when(ret.getInterval()).thenReturn(new Interval<>(first, last, ret));
+        when(ret.getInterval()).thenReturn(Interval.create(first, last, ret));
         when(ret.isMarkedSuspect()).thenReturn(false);
         when(ret.isRepaired()).thenReturn(false);
         when(ret.getRepairedAt()).thenReturn(repairedAt);

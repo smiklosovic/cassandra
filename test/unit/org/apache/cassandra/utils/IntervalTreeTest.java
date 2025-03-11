@@ -56,6 +56,17 @@ public class IntervalTreeTest implements WithQuickTheories
     }
 
     @Test
+    public void test()
+    {
+        // check a >= 0 and a < 2 and a >= 3 and a =< 6
+        Interval<Integer, Object> first = Interval.create(0, 2, true, false);
+        Interval<Integer, Object> second = Interval.create(3, 6);
+
+        System.out.println(first);
+        System.out.println(second);
+    }
+
+    @Test
     public void testSearch()
     {
         List<Interval<Integer, Integer>> intervals = new ArrayList<>();
