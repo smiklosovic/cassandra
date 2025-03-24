@@ -92,7 +92,7 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
 import static org.apache.cassandra.db.TypeSizes.sizeof;
 import static org.apache.cassandra.schema.ColumnMetadata.NO_UNIQUE_ID;
-import static org.apache.cassandra.schema.IndexMetadata.isNameValid;
+import static org.apache.cassandra.schema.SchemaConstants.isValidName;
 
 @Unmetered
 public class TableMetadata implements SchemaElement
@@ -602,11 +602,11 @@ public class TableMetadata implements SchemaElement
 
     public void validate()
     {
-        if (!isNameValid(keyspace))
-            except("Keyspace name must not be empty, more than %s characters long, or contain non-alphanumeric-underscore characters (got \"%s\")", SchemaConstants.NAME_LENGTH, keyspace);
+        if (!isValidName(keyspace, true))
+            except("Keyspace name must not be empty or contain non-alphanumeric-underscore characters (got \"%s\")", keyspace);
 
-        if (!isNameValid(name))
-            except("Table name must not be empty, more than %s characters long, or contain non-alphanumeric-underscore characters (got \"%s\")", SchemaConstants.NAME_LENGTH, name);
+        if (!isValidName(name, true))
+            except("Table name must not be empty or contain non-alphanumeric-underscore characters (got \"%s\")", name);
 
         params.validate();
 
@@ -813,7 +813,7 @@ public class TableMetadata implements SchemaElement
 
     protected void except(String format, Object... args)
     {
-        throw new ConfigurationException(keyspace + "." + name + ": " + format(format, args));
+        throw new ConfigurationException(keyspace + '.' + name + ": " + format(format, args));
     }
 
     @Override

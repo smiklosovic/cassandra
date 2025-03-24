@@ -19,6 +19,8 @@
 package org.apache.cassandra.schema;
 
 import org.apache.cassandra.cql3.CQLTester;
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.cql3.functions.types.ParseUtils;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestValidationException;
@@ -26,6 +28,7 @@ import org.apache.cassandra.utils.BloomCalculations;
 
 import org.junit.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 public class CreateTableValidationTest extends CQLTester
@@ -89,6 +92,33 @@ public class CreateTableValidationTest extends CQLTester
     {
         expectedFailure(InvalidRequestException.class, "CREATE TABLE %s (pk int, ck1 int, ck2 int, v int, PRIMARY KEY ((pk),ck1, ck2)) WITH CLUSTERING ORDER BY (ck2 ASC);",
                         "Missing CLUSTERING ORDER for column ck1");
+    }
+
+    @Test
+    public void testCreatingTableWithLongName() throws Throwable
+    {
+        String keyspace = "\"38373639353166362d356631322d343864652d393063362\"";
+        String table = "test_create_653862616_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
+
+        execute(String.format("CREATE KEYSPACE %s with replication = " +
+                              "{ 'class' : 'SimpleStrategy', 'replication_factor' : 1 }",
+                              keyspace));
+        createTableMayThrow(String.format("CREATE TABLE %s.%s (" +
+                                          "key int PRIMARY KEY," +
+                                          "val int)", keyspace, table));
+
+        execute(String.format("INSERT INTO %s.%s (key,val) VALUES (1,1)", keyspace, table));
+        flush(ParseUtils.unDoubleQuote(keyspace), table);
+        UntypedResultSet result = execute(String.format("SELECT * from %s.%s", keyspace, table));
+        assertThat(result.size()).isEqualTo(1);
+    }
+
+    @Test
+    public void testNonAlphanummericTableName()
+    {
+        assertThatExceptionOfType(ConfigurationException.class)
+        .isThrownBy(() -> createTableMayThrow(String.format("CREATE TABLE %s.\"d-3\" (key int PRIMARY KEY, val int)", KEYSPACE)))
+        .withMessageContaining("Table name must not be empty or contain non-alphanumeric-underscore characters (got \"d-3\")");
     }
 
     private void expectedFailure(final Class<? extends RequestValidationException> exceptionType, String statement, String errorMsg)
