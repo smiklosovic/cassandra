@@ -293,6 +293,17 @@ public final class HintsService implements HintsServiceMBean
     }
 
     /**
+     * Get the total hints file size of current node
+     */
+    public long getTotalHintsSizeOfNode()
+    {
+        return catalog.stores()
+                      .filter(Objects::nonNull)
+                      .mapToLong(HintsStore::getTotalFileSize)
+                      .sum();
+    }
+
+    /**
      * Gracefully and blockingly shut down the service.
      *
      * Will abort dispatch sessions that are currently in progress (which is okay, it's idempotent),
