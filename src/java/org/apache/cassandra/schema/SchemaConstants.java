@@ -79,6 +79,17 @@ public final class SchemaConstants
      */
     public static final int NAME_LENGTH = 48;
 
+    /**
+     * Longest acceptable file name. Longer names lead to file write or read errors.
+     */
+    public static final int FILENAME_LENGTH = 255;
+
+    /**
+     * Longest acceptable table name, so it can be used in a directory
+     * name constructed with a suffix of a table id and a separator.
+     */
+    public static final int TABLE_NAME_LENGTH = FILENAME_LENGTH - 32 - 1;
+
     // 59adb24e-f3cd-3e02-97f0-5b395827453f
     public static final UUID emptyVersion;
 
