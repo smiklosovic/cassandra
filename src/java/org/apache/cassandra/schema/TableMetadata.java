@@ -93,6 +93,7 @@ import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR
 import static org.apache.cassandra.db.TypeSizes.sizeof;
 import static org.apache.cassandra.schema.ColumnMetadata.NO_UNIQUE_ID;
 import static org.apache.cassandra.schema.SchemaConstants.FILENAME_LENGTH;
+import static org.apache.cassandra.schema.SchemaConstants.NAME_LENGTH;
 import static org.apache.cassandra.schema.SchemaConstants.TABLE_NAME_LENGTH;
 import static org.apache.cassandra.schema.SchemaConstants.isValidName;
 
@@ -604,14 +605,12 @@ public class TableMetadata implements SchemaElement
 
     public void validate()
     {
-        if (!isValidName(keyspace, true))
-            except("Keyspace name must not be empty or contain non-alphanumeric-underscore characters (got \"%s\")", keyspace);
+        if (!isValidName(keyspace, NAME_LENGTH))
+            except("Keyspace name must not be empty, more than %s characters long, or contain non-alphanumeric-underscore characters (got \"%s\")", NAME_LENGTH, keyspace);
 
-        if (!isValidName(name, true))
-            except("Table name must not be empty or contain non-alphanumeric-underscore characters (got \"%s\")", name);
+        if (!isValidName(name, TABLE_NAME_LENGTH))
+            except("Table name must not be empty, more than %s characters long, or contain non-alphanumeric-underscore characters (got \"%s\")", TABLE_NAME_LENGTH, name);
 
-        if (name.length() > TABLE_NAME_LENGTH)
-            except("Table name must not be longer than %s characters (got %s characters for \"%s\")", TABLE_NAME_LENGTH, name.length(), name);
         assert getTableDirectoryName().length() <= FILENAME_LENGTH : String.format("Generated directory name for a table of %s characters doesn't fit the max filename legnth of %s. This unexpectedly wasn't prevented by check of the table name length, %s, to fit %s characters (got table name \"%s\" and generated directory name \"%s\"", getTableDirectoryName().length(), FILENAME_LENGTH, name.length(), TABLE_NAME_LENGTH, name, getTableDirectoryName());
 
         params.validate();

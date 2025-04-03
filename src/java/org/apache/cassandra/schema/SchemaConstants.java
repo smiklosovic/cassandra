@@ -96,18 +96,6 @@ public final class SchemaConstants
     public static final List<String> LEGACY_AUTH_TABLES = Arrays.asList("credentials", "users", "permissions");
 
     /**
-     * Checks if the length of the given name will be suitable to be used
-     * in constructed file names.
-     *
-     * @param name the name to check
-     * @return true if the name is short enough to be safe to use, otherwise false
-     */
-    public static boolean isSafeLengthForFilename(String name)
-    {
-        return name.length() <= NAME_LENGTH;
-    }
-
-    /**
      * Names such as keyspace, table, index names are used in file paths and file names,
      * so, they need to be safe for the use there, i.e., short enough and
      * containing only alphanumeric characters and underscores.
@@ -117,7 +105,7 @@ public final class SchemaConstants
      */
     public static boolean isValidName(String name)
     {
-        return isValidName(name, false);
+        return isValidName(name, NAME_LENGTH);
     }
 
     /**
@@ -127,15 +115,15 @@ public final class SchemaConstants
      * However, historically not all names were checked for their length.
      * Such legacy behaviour is supported through passing true for doNotCheckLength.
      *
-     * @param name             the name to check
-     * @param doNotCheckLength specifies if no check on the name length should be done
-     *                         to support legacy behaviour
+     * @param name      the name to check
+     * @param maxLength max acceptable length for the given name. For the cases when it cannot
+     *                  be limited, 0 or negative number should be supplied.
      * @return true if the name is valid, false otherwise
      */
-    public static boolean isValidName(String name, boolean doNotCheckLength)
+    public static boolean isValidName(String name, int maxLength)
     {
-        return name != null && !name.isEmpty() && PATTERN_WORD_CHARS.matcher(name).matches() &&
-               (doNotCheckLength || isSafeLengthForFilename(name));
+        return name != null && !name.isEmpty() && PATTERN_WORD_CHARS.matcher(name).matches()
+               && (maxLength <= 0 || name.length() <= maxLength);
     }
 
     static

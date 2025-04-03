@@ -28,6 +28,7 @@ import org.junit.Test;
 
 import static org.apache.cassandra.schema.SchemaConstants.FILENAME_LENGTH;
 import static org.apache.cassandra.schema.SchemaConstants.NAME_LENGTH;
+import static org.apache.cassandra.schema.SchemaConstants.TABLE_NAME_LENGTH;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
@@ -105,7 +106,9 @@ public class CreateTableValidationTest extends CQLTester
         execute(String.format("CREATE KEYSPACE %s with replication = " +
                               "{ 'class' : 'SimpleStrategy', 'replication_factor' : 1 }",
                               keyspaceName));
-        assertInvalidMessage("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.lllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll: Table name must not be longer than 222 characters (got 223 characters for \"lllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll\")",
+
+        assertInvalidMessage(String.format("%1$s.%2$s: Table name must not be empty, more than %3$s characters long, or contain non-alphanumeric-underscore characters (got \"%2$s\")",
+                                           keyspaceName, tooLongTableName, TABLE_NAME_LENGTH),
                              String.format("CREATE TABLE %s.%s (" +
                                           "key int PRIMARY KEY," +
                                           "val int)", keyspaceName, tooLongTableName));
@@ -124,7 +127,7 @@ public class CreateTableValidationTest extends CQLTester
     {
         assertThatExceptionOfType(ConfigurationException.class)
         .isThrownBy(() -> createTableMayThrow(String.format("CREATE TABLE %s.\"d-3\" (key int PRIMARY KEY, val int)", KEYSPACE)))
-        .withMessageContaining("Table name must not be empty or contain non-alphanumeric-underscore characters (got \"d-3\")");
+        .withMessageContaining("Table name must not be empty, more than 222 characters long, or contain non-alphanumeric-underscore characters (got \"d-3\")");
     }
 
     private void expectedFailure(final Class<? extends RequestValidationException> exceptionType, String statement, String errorMsg)
