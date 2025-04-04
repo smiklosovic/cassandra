@@ -80,7 +80,7 @@ public final class SchemaConstants
     public static final int NAME_LENGTH = 48;
 
     /**
-     * Longest acceptable file name. Longer names lead to file write or read errors.
+     * Longest acceptable file name. Longer names lead to too long file name error.
      */
     public static final int FILENAME_LENGTH = 255;
 
@@ -96,9 +96,9 @@ public final class SchemaConstants
     public static final List<String> LEGACY_AUTH_TABLES = Arrays.asList("credentials", "users", "permissions");
 
     /**
-     * Names such as keyspace, table, index names are used in file paths and file names,
-     * so, they need to be safe for the use there, i.e., short enough and
-     * containing only alphanumeric characters and underscores.
+     * Validates that a name is valid to be used in files. Assumes that the name length
+     * should fit the default, {@link #NAME_LENGTH}.
+     * See {@link #isValidName(String, int)} for more details.
      *
      * @param name the name to check
      * @return whether the name is safe for use in file paths and file names
@@ -112,8 +112,11 @@ public final class SchemaConstants
      * Names such as keyspace, table, index names are used in file paths and file names,
      * so, they need to be safe for the use there, i.e., short enough and
      * containing only alphanumeric characters and underscores.
-     * However, historically not all names were checked for their length.
-     * Such legacy behaviour is supported through passing true for doNotCheckLength.
+     * Allows to provide the length of names, since it varies for different database objects,
+     * especially, they were not historically controlled for {@link #NAME_LENGTH}, see,
+     * e.g., CASSANDRA-20389.
+     * There are cases when the length cannot be controlled by a single value. In such case
+     * the length validation is skipped if the given length is smaller than 1.
      *
      * @param name      the name to check
      * @param maxLength max acceptable length for the given name. For the cases when it cannot

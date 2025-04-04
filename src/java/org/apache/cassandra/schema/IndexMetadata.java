@@ -125,6 +125,7 @@ public final class IndexMetadata
 
     public void validate(TableMetadata table)
     {
+        // Validating the length will be addressed by CASSANDRA-20445
         if (!isValidName(name, -1))
             throw new ConfigurationException("Illegal index name " + name);
 

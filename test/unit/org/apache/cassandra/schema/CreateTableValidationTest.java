@@ -110,12 +110,12 @@ public class CreateTableValidationTest extends CQLTester
         assertInvalidMessage(String.format("%1$s.%2$s: Table name must not be empty, more than %3$s characters long, or contain non-alphanumeric-underscore characters (got \"%2$s\")",
                                            keyspaceName, tooLongTableName, TABLE_NAME_LENGTH),
                              String.format("CREATE TABLE %s.%s (" +
-                                          "key int PRIMARY KEY," +
-                                          "val int)", keyspaceName, tooLongTableName));
+                                           "key int PRIMARY KEY," +
+                                           "val int)", keyspaceName, tooLongTableName));
 
-        createTableMayThrow(String.format("CREATE TABLE %s.%s (" +
-                                          "key int PRIMARY KEY," +
-                                          "val int)", keyspaceName, tableName));
+        createTable(String.format("CREATE TABLE %s.%s (" +
+                                  "key int PRIMARY KEY," +
+                                  "val int)", keyspaceName, tableName));
         execute(String.format("INSERT INTO %s.%s (key,val) VALUES (1,1)", keyspaceName, tableName));
         assertThat(execute(String.format("SELECT * from %s.%s", keyspaceName, tableName))).hasSize(1);
         flush(keyspaceName, tableName);
@@ -123,11 +123,10 @@ public class CreateTableValidationTest extends CQLTester
     }
 
     @Test
-    public void testNonAlphanummericTableName()
+    public void testNonAlphanummericTableName() throws Throwable
     {
-        assertThatExceptionOfType(ConfigurationException.class)
-        .isThrownBy(() -> createTableMayThrow(String.format("CREATE TABLE %s.\"d-3\" (key int PRIMARY KEY, val int)", KEYSPACE)))
-        .withMessageContaining("Table name must not be empty, more than 222 characters long, or contain non-alphanumeric-underscore characters (got \"d-3\")");
+        assertInvalidMessage(String.format("%s.d-3: Table name must not be empty, more than 222 characters long, or contain non-alphanumeric-underscore characters (got \"d-3\")", KEYSPACE),
+                             String.format("CREATE TABLE %s.\"d-3\" (key int PRIMARY KEY, val int)", KEYSPACE));
     }
 
     private void expectedFailure(final Class<? extends RequestValidationException> exceptionType, String statement, String errorMsg)

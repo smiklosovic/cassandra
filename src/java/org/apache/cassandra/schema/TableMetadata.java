@@ -753,17 +753,33 @@ public class TableMetadata implements SchemaElement
         return name + SECONDARY_INDEX_NAME_SEPARATOR + info.name;
     }
 
+    /**
+     * Returns the table part of the index table name or the entire table name
+     * if not an index table.
+     * @return table name part
+     */
     public String getTableName()
     {
         int idx = name.indexOf(SECONDARY_INDEX_NAME_SEPARATOR);
         return idx >= 0 ? name.substring(0, idx) : name;
     }
 
+    /**
+     * Generates directory name for the table by using table part of
+     * the (index) table name and table id.
+     * @return directory name
+     */
     public String getTableDirectoryName()
     {
         return getTableName() + '-' + id.toHexString();
     }
 
+    /**
+     * Gets the index name from the name of the index table including dot prefix.
+     * If not an index table, returns null.
+     * @return index name with dot prefix or null
+     */
+    @Nullable
     public String getIndexNameWithDot()
     {
         int idx = name.indexOf(SECONDARY_INDEX_NAME_SEPARATOR);
