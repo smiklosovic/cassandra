@@ -775,9 +775,10 @@ public class TableMetadata implements SchemaElement
     }
 
     /**
-     * Gets the index name from the name of the index table including dot prefix.
+     * Returns the index name from the name of an index table
+     * including the dot prexing the index name, see {@link #indexTableName}.
      * If not an index table, returns null.
-     * @return index name with dot prefix or null
+     * @return index name prefixed with dot prefix or null
      */
     @Nullable
     public String getIndexNameWithDot()
