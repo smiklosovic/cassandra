@@ -96,37 +96,15 @@ public final class SchemaConstants
     public static final List<String> LEGACY_AUTH_TABLES = Arrays.asList("credentials", "users", "permissions");
 
     /**
-     * Validates that a name is valid to be used in files. Assumes that the name length
-     * should fit the default, {@link #NAME_LENGTH}.
-     * See {@link #isValidName(String, int)} for more details.
+     * Validates that a name contains only alphanummeric characters or underscore,
+     * so it can be used in file or directory names.
      *
      * @param name the name to check
-     * @return whether the name is safe for use in file paths and file names
+     * @return whether the name contains only valid characters
      */
     public static boolean isValidName(String name)
     {
-        return isValidName(name, NAME_LENGTH);
-    }
-
-    /**
-     * Names such as keyspace, table, index names are used in file paths and file names,
-     * so, they need to be safe for the use there, i.e., short enough and
-     * containing only alphanumeric characters and underscores.
-     * Allows to provide the length of names, since it varies for different database objects,
-     * especially, they were not historically controlled for {@link #NAME_LENGTH}, see,
-     * e.g., CASSANDRA-20389.
-     * There is a case when the length cannot be controlled by a single value. In such case
-     * the length validation is skipped if the given length is smaller than 1.
-     *
-     * @param name      the name to check
-     * @param maxLength max acceptable length for the given name. For the cases when it cannot
-     *                  be limited, 0 or negative number should be supplied.
-     * @return true if the name is valid, false otherwise
-     */
-    public static boolean isValidName(String name, int maxLength)
-    {
-        return name != null && !name.isEmpty() && PATTERN_WORD_CHARS.matcher(name).matches()
-               && (maxLength <= 0 || name.length() <= maxLength);
+        return name != null && !name.isEmpty() && PATTERN_WORD_CHARS.matcher(name).matches();
     }
 
     static

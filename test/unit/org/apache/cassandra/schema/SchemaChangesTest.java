@@ -52,6 +52,7 @@ import org.apache.cassandra.utils.FBUtilities;
 import static org.apache.cassandra.Util.throwAssert;
 import static org.apache.cassandra.cql3.CQLTester.assertRows;
 import static org.apache.cassandra.cql3.CQLTester.row;
+import static org.apache.cassandra.schema.SchemaConstants.NAME_LENGTH;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -131,13 +132,22 @@ public class SchemaChangesTest
     @Test
     public void testInvalidNames()
     {
-        String[] valid = {"1", "a", "_1", "b_", "__", "1_a"};
+        String[] valid = { "1", "a", "_1", "b_", "__", "1_a" };
         for (String s : valid)
+        {
             assertTrue(SchemaConstants.isValidName(s));
+            assertTrue(KeyspaceMetadata.isValidKeyspaceName(s));
+        }
 
-        String[] invalid = {"b@t", "dash-y", "", " ", "dot.s", ".hidden"};
+        String[] invalid = { "b@t", "dash-y", "", " ", "dot.s", ".hidden" };
         for (String s : invalid)
+        {
             assertFalse(SchemaConstants.isValidName(s));
+            assertFalse(KeyspaceMetadata.isValidKeyspaceName(s));
+        }
+
+        assertTrue(KeyspaceMetadata.isValidKeyspaceName("k".repeat(NAME_LENGTH)));
+        assertFalse(KeyspaceMetadata.isValidKeyspaceName("k".repeat(NAME_LENGTH + 1)));
     }
 
     @Test

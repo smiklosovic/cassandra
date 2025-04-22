@@ -62,6 +62,12 @@ public final class KeyspaceMetadata implements SchemaElement
 {
     public static final Serializer serializer = new Serializer();
 
+    public static boolean isValidKeyspaceName(String keyspaceName)
+    {
+        return SchemaConstants.isValidName(keyspaceName)
+               && keyspaceName.length() <= SchemaConstants.NAME_LENGTH;
+    }
+
     public enum Kind
     {
         REGULAR, VIRTUAL
@@ -381,7 +387,7 @@ public final class KeyspaceMetadata implements SchemaElement
 
     public void validate(ClusterMetadata metadata)
     {
-        if (!SchemaConstants.isValidName(name))
+        if (!isValidKeyspaceName(name))
         {
             throw new ConfigurationException(format("Keyspace name must not be empty, more than %s characters long, "
                                                     + "or contain non-alphanumeric-underscore characters (got \"%s\")",

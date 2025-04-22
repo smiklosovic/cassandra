@@ -98,7 +98,7 @@ public class CreateTableValidationTest extends CQLTester
     @Test
     public void testCreatingTableWithLongName() throws Throwable
     {
-        int tableIdSuffix = "-1b255f4def2540a60000000000000007".length();
+        int tableIdSuffix = "-1b255f4def2540a60000000000000000".length();
         String keyspaceName = "k".repeat(NAME_LENGTH);
         String tableName = "t".repeat(FILENAME_LENGTH - tableIdSuffix);
         String tooLongTableName = "l".repeat(FILENAME_LENGTH - tableIdSuffix + 1);
@@ -107,8 +107,8 @@ public class CreateTableValidationTest extends CQLTester
                               "{ 'class' : 'SimpleStrategy', 'replication_factor' : 1 }",
                               keyspaceName));
 
-        assertInvalidMessage(String.format("%1$s.%2$s: Table name must not be empty, more than %3$s characters long, or contain non-alphanumeric-underscore characters (got \"%2$s\")",
-                                           keyspaceName, tooLongTableName, TABLE_NAME_LENGTH),
+        assertInvalidMessage(String.format("%s.%s: Table name must not be more than %d characters long (got %d characters for \"%2$s\")",
+                                           keyspaceName, tooLongTableName, TABLE_NAME_LENGTH, tooLongTableName.length()),
                              String.format("CREATE TABLE %s.%s (" +
                                            "key int PRIMARY KEY," +
                                            "val int)", keyspaceName, tooLongTableName));
@@ -125,9 +125,9 @@ public class CreateTableValidationTest extends CQLTester
     @Test
     public void testNonAlphanummericTableName() throws Throwable
     {
-        assertInvalidMessage(String.format("%s.d-3: Table name must not be empty, more than 222 characters long, or contain non-alphanumeric-underscore characters (got \"d-3\")", KEYSPACE),
+        assertInvalidMessage(String.format("%s.d-3: Table name must not be empty or not contain non-alphanumeric-underscore characters (got \"d-3\")", KEYSPACE),
                              String.format("CREATE TABLE %s.\"d-3\" (key int PRIMARY KEY, val int)", KEYSPACE));
-        assertInvalidMessage(String.format("%s.    : Table name must not be empty, more than 222 characters long, or contain non-alphanumeric-underscore characters (got \"    \")", KEYSPACE),
+        assertInvalidMessage(String.format("%s.    : Table name must not be empty or not contain non-alphanumeric-underscore characters (got \"    \")", KEYSPACE),
                              String.format("CREATE TABLE %s.\"    \" (key int PRIMARY KEY, val int)", KEYSPACE));
     }
 
