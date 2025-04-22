@@ -115,7 +115,7 @@ public final class SchemaConstants
      * Allows to provide the length of names, since it varies for different database objects,
      * especially, they were not historically controlled for {@link #NAME_LENGTH}, see,
      * e.g., CASSANDRA-20389.
-     * There are cases when the length cannot be controlled by a single value. In such case
+     * There is a case when the length cannot be controlled by a single value. In such case
      * the length validation is skipped if the given length is smaller than 1.
      *
      * @param name      the name to check

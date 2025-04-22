@@ -127,6 +127,8 @@ public class CreateTableValidationTest extends CQLTester
     {
         assertInvalidMessage(String.format("%s.d-3: Table name must not be empty, more than 222 characters long, or contain non-alphanumeric-underscore characters (got \"d-3\")", KEYSPACE),
                              String.format("CREATE TABLE %s.\"d-3\" (key int PRIMARY KEY, val int)", KEYSPACE));
+        assertInvalidMessage(String.format("%s.    : Table name must not be empty, more than 222 characters long, or contain non-alphanumeric-underscore characters (got \"    \")", KEYSPACE),
+                             String.format("CREATE TABLE %s.\"    \" (key int PRIMARY KEY, val int)", KEYSPACE));
     }
 
     private void expectedFailure(final Class<? extends RequestValidationException> exceptionType, String statement, String errorMsg)
