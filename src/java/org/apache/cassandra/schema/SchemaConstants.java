@@ -43,7 +43,6 @@ public final class SchemaConstants
     public static final Pattern PATTERN_WORD_CHARS = Pattern.compile("\\w+");
     public static final Pattern PATTERN_NON_WORD_CHAR = Pattern.compile("\\W");
 
-
     public static final String SYSTEM_KEYSPACE_NAME = "system";
     public static final String SCHEMA_KEYSPACE_NAME = "system_schema";
     public static final String METADATA_KEYSPACE_NAME = "system_cluster_metadata";

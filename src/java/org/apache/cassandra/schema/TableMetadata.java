@@ -609,13 +609,7 @@ public class TableMetadata implements SchemaElement
         if (!isValidKeyspaceName(keyspace))
             except("Keyspace name must not be empty, more than %s characters long, or contain non-alphanumeric-underscore characters (got \"%s\")", NAME_LENGTH, keyspace);
 
-        if (!isValidName(name))
-            except("Table name must not be empty or not contain non-alphanumeric-underscore characters (got \"%s\")", name);
-
-        if (name.length() > TABLE_NAME_LENGTH)
-            except("Table name must not be more than %d characters long (got %d characters for \"%s\")", TABLE_NAME_LENGTH, name.length(), name);
-
-        assert getTableDirectoryName().length() <= FILENAME_LENGTH : String.format("Generated directory name for a table of %d characters doesn't fit the max filename legnth of %s. This unexpectedly wasn't prevented by check of the table name length, %d, to fit %d characters (got table name \"%s\" and generated directory name \"%s\"", getTableDirectoryName().length(), FILENAME_LENGTH, name.length(), TABLE_NAME_LENGTH, name, getTableDirectoryName());
+        validateTableName();
 
         params.validate();
 
@@ -656,6 +650,17 @@ public class TableMetadata implements SchemaElement
         }
 
         require((params.transactionalMode == TransactionalMode.off && params.transactionalMigrationFrom == TransactionalMigrationFromMode.none) || !isCounter(), "Counters are not supported with Accord for table " + this);
+    }
+
+    private void validateTableName()
+    {
+        if (!isValidName(name))
+            except("Table name must not be empty or not contain non-alphanumeric-underscore characters (got \"%s\")", name);
+
+        if (name.length() > TABLE_NAME_LENGTH)
+            except("Table name must not be more than %d characters long (got %d characters for \"%s\")", TABLE_NAME_LENGTH, name.length(), name);
+
+        assert getTableDirectoryName().length() <= FILENAME_LENGTH : String.format("Generated directory name for a table of %d characters doesn't fit the max filename legnth of %s. This unexpectedly wasn't prevented by check of the table name length, %d, to fit %d characters (got table name \"%s\" and generated directory name \"%s\"", getTableDirectoryName().length(), FILENAME_LENGTH, name.length(), TABLE_NAME_LENGTH, name, getTableDirectoryName());
     }
 
     /**
