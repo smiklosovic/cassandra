@@ -53,6 +53,8 @@ import static org.apache.cassandra.Util.throwAssert;
 import static org.apache.cassandra.cql3.CQLTester.assertRows;
 import static org.apache.cassandra.cql3.CQLTester.row;
 import static org.apache.cassandra.schema.SchemaConstants.NAME_LENGTH;
+import static org.apache.cassandra.schema.SchemaUtils.validateKeyspaceName;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -136,19 +138,21 @@ public class SchemaChangesTest
         String[] valid = { "1", "a", "_1", "b_", "__", "1_a" };
         for (String s : valid)
         {
-            assertTrue(SchemaConstants.isValidName(s));
-            assertTrue(KeyspaceMetadata.isValidKeyspaceName(s));
+            assertTrue(SchemaUtils.isValidName(s));
+            validateKeyspaceName(s);
         }
 
         String[] invalid = { "b@t", "dash-y", "", " ", "dot.s", ".hidden" };
         for (String s : invalid)
         {
-            assertFalse(SchemaConstants.isValidName(s));
-            assertFalse(KeyspaceMetadata.isValidKeyspaceName(s));
+            assertFalse(SchemaUtils.isValidName(s));
+            assertThatThrownBy(() -> validateKeyspaceName(s))
+            .isInstanceOf(ConfigurationException.class);
         }
 
-        assertTrue(KeyspaceMetadata.isValidKeyspaceName("k".repeat(NAME_LENGTH)));
-        assertFalse(KeyspaceMetadata.isValidKeyspaceName("k".repeat(NAME_LENGTH + 1)));
+        validateKeyspaceName("k".repeat(NAME_LENGTH));
+        assertThatThrownBy(() -> validateKeyspaceName("k".repeat(NAME_LENGTH + 1)))
+        .isInstanceOf(ConfigurationException.class);
     }
 
     @Test

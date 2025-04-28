@@ -74,6 +74,9 @@ import org.apache.cassandra.service.snapshot.SnapshotManifest;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.Pair;
 
+import static org.apache.cassandra.schema.SchemaUtils.getIndexNameWithDot;
+import static org.apache.cassandra.schema.SchemaUtils.getTableDirectoryName;
+import static org.apache.cassandra.schema.SchemaUtils.getTableName;
 import static org.apache.cassandra.utils.LocalizeString.toLowerCaseLocalized;
 
 /**
@@ -224,11 +227,11 @@ public class Directories
         this.metadata = metadata;
         this.paths = paths;
         ImmutableMap.Builder<Path, DataDirectory> canonicalPathsBuilder = ImmutableMap.builder();
-        String indexNameWithDot = metadata.getIndexNameWithDot();
+        String indexNameWithDot = getIndexNameWithDot(metadata.name);
 
         this.dataPaths = new File[paths.length];
         // If upgraded from version less than 2.1, use existing directories
-        String oldSSTableRelativePath = join(metadata.keyspace, metadata.getTableName());
+        String oldSSTableRelativePath = join(metadata.keyspace, getTableName(metadata.name));
         for (int i = 0; i < paths.length; ++i)
         {
             // check if old SSTable directory exists
@@ -241,7 +244,7 @@ public class Directories
         {
             canonicalPathsBuilder = ImmutableMap.builder();
             // use 2.1+ style
-            String newSSTableRelativePath = join(metadata.keyspace, metadata.getTableDirectoryName());
+            String newSSTableRelativePath = join(metadata.keyspace, getTableDirectoryName(metadata.name, metadata.id));
             for (int i = 0; i < paths.length; ++i)
             {
                 File dataPath = new File(paths[i].location, newSSTableRelativePath);

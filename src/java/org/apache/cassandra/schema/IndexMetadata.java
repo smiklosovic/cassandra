@@ -49,8 +49,8 @@ import org.apache.cassandra.utils.UUIDSerializer;
 
 import static org.apache.cassandra.db.TypeSizes.sizeof;
 import static org.apache.cassandra.utils.LocalizeString.toLowerCaseLocalized;
-import static org.apache.cassandra.schema.SchemaConstants.PATTERN_NON_WORD_CHAR;
-import static org.apache.cassandra.schema.SchemaConstants.isValidName;
+import static org.apache.cassandra.schema.SchemaUtils.PATTERN_NON_WORD_CHAR;
+import static org.apache.cassandra.schema.SchemaUtils.isValidName;
 
 /**
  * An immutable representation of secondary index metadata.

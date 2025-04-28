@@ -92,11 +92,6 @@ import static java.util.stream.Collectors.toSet;
 import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR;
 import static org.apache.cassandra.db.TypeSizes.sizeof;
 import static org.apache.cassandra.schema.ColumnMetadata.NO_UNIQUE_ID;
-import static org.apache.cassandra.schema.KeyspaceMetadata.isValidKeyspaceName;
-import static org.apache.cassandra.schema.SchemaConstants.FILENAME_LENGTH;
-import static org.apache.cassandra.schema.SchemaConstants.NAME_LENGTH;
-import static org.apache.cassandra.schema.SchemaConstants.TABLE_NAME_LENGTH;
-import static org.apache.cassandra.schema.SchemaConstants.isValidName;
 
 @Unmetered
 public class TableMetadata implements SchemaElement
@@ -606,10 +601,7 @@ public class TableMetadata implements SchemaElement
 
     public void validate()
     {
-        if (!isValidKeyspaceName(keyspace))
-            except("Keyspace name must not be empty, more than %s characters long, or contain non-alphanumeric-underscore characters (got \"%s\")", NAME_LENGTH, keyspace);
-
-        validateTableName();
+        SchemaUtils.validateTableName(this);
 
         params.validate();
 
@@ -650,17 +642,6 @@ public class TableMetadata implements SchemaElement
         }
 
         require((params.transactionalMode == TransactionalMode.off && params.transactionalMigrationFrom == TransactionalMigrationFromMode.none) || !isCounter(), "Counters are not supported with Accord for table " + this);
-    }
-
-    private void validateTableName()
-    {
-        if (!isValidName(name))
-            except("Table name must not be empty or not contain non-alphanumeric-underscore characters (got \"%s\")", name);
-
-        if (name.length() > TABLE_NAME_LENGTH)
-            except("Table name must not be more than %d characters long (got %d characters for \"%s\")", TABLE_NAME_LENGTH, name.length(), name);
-
-        assert getTableDirectoryName().length() <= FILENAME_LENGTH : String.format("Generated directory name for a table of %d characters doesn't fit the max filename legnth of %s. This unexpectedly wasn't prevented by check of the table name length, %d, to fit %d characters (got table name \"%s\" and generated directory name \"%s\"", getTableDirectoryName().length(), FILENAME_LENGTH, name.length(), TABLE_NAME_LENGTH, name, getTableDirectoryName());
     }
 
     /**
@@ -762,39 +743,6 @@ public class TableMetadata implements SchemaElement
         return name + SECONDARY_INDEX_NAME_SEPARATOR + info.name;
     }
 
-    /**
-     * Returns the table part of the index table name or the entire table name
-     * if not an index table.
-     * @return table name part
-     */
-    public String getTableName()
-    {
-        int idx = name.indexOf(SECONDARY_INDEX_NAME_SEPARATOR);
-        return idx >= 0 ? name.substring(0, idx) : name;
-    }
-
-    /**
-     * Generates directory name for the table by using table part of
-     * the (index) table name and table id.
-     * @return directory name
-     */
-    public String getTableDirectoryName()
-    {
-        return getTableName() + '-' + id.toHexString();
-    }
-
-    /**
-     * Returns the index name from the name of an index table
-     * including the dot prexing the index name, see {@link #indexTableName}.
-     * If not an index table, returns null.
-     * @return index name prefixed with dot prefix or null
-     */
-    @Nullable
-    public String getIndexNameWithDot()
-    {
-        int idx = name.indexOf(SECONDARY_INDEX_NAME_SEPARATOR);
-        return idx >= 0 ? name.substring(idx) : null;
-    }
 
     /**
      * @return true if the change as made impacts queries/updates on the table, effectively this is

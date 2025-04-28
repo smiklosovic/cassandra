@@ -22,7 +22,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
@@ -40,9 +39,6 @@ import static org.apache.cassandra.utils.LocalizeString.toLowerCaseLocalized;
  */
 public final class SchemaConstants
 {
-    public static final Pattern PATTERN_WORD_CHARS = Pattern.compile("\\w+");
-    public static final Pattern PATTERN_NON_WORD_CHAR = Pattern.compile("\\W");
-
     public static final String SYSTEM_KEYSPACE_NAME = "system";
     public static final String SCHEMA_KEYSPACE_NAME = "system_schema";
     public static final String METADATA_KEYSPACE_NAME = "system_cluster_metadata";
@@ -93,18 +89,6 @@ public final class SchemaConstants
     public static final UUID emptyVersion;
 
     public static final List<String> LEGACY_AUTH_TABLES = Arrays.asList("credentials", "users", "permissions");
-
-    /**
-     * Validates that a name contains only alphanummeric characters or underscore,
-     * so it can be used in file or directory names.
-     *
-     * @param name the name to check
-     * @return whether the name contains only valid characters
-     */
-    public static boolean isValidName(String name)
-    {
-        return name != null && !name.isEmpty() && PATTERN_WORD_CHARS.matcher(name).matches();
-    }
 
     static
     {

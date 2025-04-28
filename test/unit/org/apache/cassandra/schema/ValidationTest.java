@@ -50,19 +50,19 @@ public class ValidationTest extends CassandraTestBase
     @Test
     public void testIsNameValidPositive()
     {
-        assertTrue(SchemaConstants.isValidName("abcdefghijklmnopqrstuvwxyz"));
-        assertTrue(SchemaConstants.isValidName("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
-        assertTrue(SchemaConstants.isValidName("_01234567890"));
+        assertTrue(SchemaUtils.isValidName("abcdefghijklmnopqrstuvwxyz"));
+        assertTrue(SchemaUtils.isValidName("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
+        assertTrue(SchemaUtils.isValidName("_01234567890"));
     }
     
     @Test
     public void testIsNameValidNegative()
     {
-        assertFalse(SchemaConstants.isValidName(null));
-        assertFalse(SchemaConstants.isValidName(""));
-        assertFalse(SchemaConstants.isValidName(" "));
-        assertFalse(SchemaConstants.isValidName("@"));
-        assertFalse(SchemaConstants.isValidName("!"));
+        assertFalse(SchemaUtils.isValidName(null));
+        assertFalse(SchemaUtils.isValidName(""));
+        assertFalse(SchemaUtils.isValidName(" "));
+        assertFalse(SchemaUtils.isValidName("@"));
+        assertFalse(SchemaUtils.isValidName("!"));
     }
 
     private static final Set<String> primitiveTypes =

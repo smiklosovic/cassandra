@@ -74,6 +74,7 @@ import org.apache.cassandra.inject.Injection;
 import org.apache.cassandra.inject.Injections;
 import org.apache.cassandra.inject.InvokePointBuilder;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.schema.SchemaUtils;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.Throwables;
 import org.assertj.core.api.Assertions;
@@ -261,7 +262,7 @@ public class StorageAttachedIndexDDLTest extends SAITester
         assertThatThrownBy(() -> executeNet(String.format("CREATE INDEX ON %%s(\"%s\")" +
                                                           " USING 'sai'", invalidColumn)))
         .isInstanceOf(InvalidQueryException.class)
-        .hasMessage(String.format(CreateIndexStatement.INVALID_CHARS_CUSTOM_INDEX_TARGET, invalidColumn));
+        .hasMessage(String.format(SchemaUtils.INVALID_CHARS_CUSTOM_INDEX_TARGET, invalidColumn));
     }
 
     @Test

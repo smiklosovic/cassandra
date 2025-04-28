@@ -60,8 +60,6 @@ public final class CreateIndexStatement extends AlterSchemaStatement
     public static final String CUSTOM_MULTIPLE_COLUMNS = "Only CUSTOM indexes support multiple columns";
     public static final String DUPLICATE_TARGET_COLUMN = "Duplicate column '%s' in index target list";
     public static final String COLUMN_DOES_NOT_EXIST = "Column '%s' doesn't exist";
-    public static final String INVALID_CHARS_CUSTOM_INDEX_TARGET = "Column '%s' contains non-alphanumeric-underscore characters";
-    public static final String TOO_LONG_CUSTOM_INDEX_TARGET = "Column '%s' is longer than the permissible name length of %d characters";
     public static final String COLLECTIONS_WITH_DURATIONS_NOT_SUPPORTED = "Secondary indexes are not supported on collections containing durations";
     public static final String TUPLES_WITH_DURATIONS_NOT_SUPPORTED = "Secondary indexes are not supported on tuples containing durations";
     public static final String DURATIONS_NOT_SUPPORTED = "Secondary indexes are not supported on duration columns";
@@ -220,14 +218,6 @@ public final class CreateIndexStatement extends AlterSchemaStatement
         return ImmutableSet.of();
     }
 
-    private void validateCustomIndexColumnName(String name)
-    {
-        if (!SchemaConstants.isValidName(name))
-            throw ire(INVALID_CHARS_CUSTOM_INDEX_TARGET, name);
-        if (name.length() > SchemaConstants.NAME_LENGTH)
-            throw ire(TOO_LONG_CUSTOM_INDEX_TARGET, name, SchemaConstants.NAME_LENGTH);
-    }
-
     private void validateIndexTarget(TableMetadata table, IndexMetadata.Kind kind, IndexTarget target)
     {
         ColumnMetadata column = table.getColumn(target.column);
@@ -239,7 +229,7 @@ public final class CreateIndexStatement extends AlterSchemaStatement
 
         // This check will be removed with CASSANDRA-20235
         if ((kind == IndexMetadata.Kind.CUSTOM))
-            validateCustomIndexColumnName(target.column.toString());
+            SchemaUtils.validateCustomIndexColumnName(target.column.toString());
 
         if (column.type.referencesDuration())
         {

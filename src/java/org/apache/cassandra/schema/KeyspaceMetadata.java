@@ -53,6 +53,7 @@ import org.apache.cassandra.schema.Views.ViewsDiff;
 import static com.google.common.collect.Iterables.any;
 import static java.lang.String.format;
 import static org.apache.cassandra.db.TypeSizes.sizeof;
+import static org.apache.cassandra.schema.SchemaUtils.KEYSPACE_NAME_INALID_TEMPLATE;
 import static org.apache.cassandra.utils.LocalizeString.toLowerCaseLocalized;
 
 /**
@@ -61,12 +62,6 @@ import static org.apache.cassandra.utils.LocalizeString.toLowerCaseLocalized;
 public final class KeyspaceMetadata implements SchemaElement
 {
     public static final Serializer serializer = new Serializer();
-
-    public static boolean isValidKeyspaceName(String keyspaceName)
-    {
-        return SchemaConstants.isValidName(keyspaceName)
-               && keyspaceName.length() <= SchemaConstants.NAME_LENGTH;
-    }
 
     public enum Kind
     {
@@ -387,13 +382,7 @@ public final class KeyspaceMetadata implements SchemaElement
 
     public void validate(ClusterMetadata metadata)
     {
-        if (!isValidKeyspaceName(name))
-        {
-            throw new ConfigurationException(format("Keyspace name must not be empty, more than %s characters long, "
-                                                    + "or contain non-alphanumeric-underscore characters (got \"%s\")",
-                                                    SchemaConstants.NAME_LENGTH,
-                                                    name));
-        }
+        SchemaUtils.validateKeyspaceName(name, (message) -> { throw new ConfigurationException(message); }, KEYSPACE_NAME_INALID_TEMPLATE);
 
         params.validate(name, null, metadata);
         tablesAndViews().forEach(TableMetadata::validate);

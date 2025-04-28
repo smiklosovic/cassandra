@@ -46,6 +46,8 @@ import org.apache.cassandra.transport.Dispatcher;
 import org.apache.cassandra.transport.Event.SchemaChange;
 import org.apache.cassandra.transport.messages.ResultMessage;
 
+import static org.apache.cassandra.schema.SchemaUtils.KEYSPACE_NAME_INALID_TEMPLATE;
+
 abstract public class AlterSchemaStatement implements CQLStatement.SingleKeyspaceCqlStatement, SchemaTransformation
 {
     private static final Logger logger = LoggerFactory.getLogger(AlterSchemaStatement.class);
@@ -168,10 +170,7 @@ abstract public class AlterSchemaStatement implements CQLStatement.SingleKeyspac
         if (null != keyspace && keyspace.isVirtual())
             throw ire("Virtual keyspace '%s' is not user-modifiable", keyspaceName);
 
-        if (!KeyspaceMetadata.isValidKeyspaceName(keyspaceName))
-            throw ire("Keyspace name must not be empty, more than %d characters long, " +
-                      "or contain non-alphanumeric-underscore characters (got '%s')",
-                      SchemaConstants.NAME_LENGTH, keyspaceName);
+        SchemaUtils.validateKeyspaceName(keyspaceName, (message) -> { throw new InvalidRequestException(message); }, KEYSPACE_NAME_INALID_TEMPLATE);
 
         setExecutionTimestamp(state.getTimestamp());
         // Perform a 'dry-run' attempt to apply the transformation locally before submitting to the CMS. This can save a
