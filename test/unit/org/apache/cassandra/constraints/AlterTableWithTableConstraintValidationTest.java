@@ -263,4 +263,18 @@ public class AlterTableWithTableConstraintValidationTest extends CqlConstraintVa
         createTable("CREATE TABLE %s (pk text, col1 int, primary key (pk));");
         execute("ALTER TABLE %s ADD col2 int CHECK col2 > 0");
     }
+
+    @Test
+    public void testNotNullSyntax() throws Throwable
+    {
+        createTable("CREATE TABLE %s (pk text, col1 int NOT NULL, primary key (pk));");
+        createTable("CREATE TABLE %s (pk text, col1 int CHECK NOT NULL, primary key (pk));");
+        createTable("CREATE TABLE %s (pk text, col1 int NOT NULL CHECK col1 > 0, primary key (pk));");
+        execute("ALTER TABLE %s ALTER col1 CHECK col1 > 100");
+        execute("ALTER TABLE %s ALTER col1 CHECK NOT NULL AND col1 > 100");
+
+        assertInvalidThrowMessage("Duplicate definition of NOT NULL constraint",
+                                  InvalidRequestException.class,
+                                  "CREATE TABLE %s (pk text, col1 int NOT NULL CHECK NOT NULL, primary key (pk));");
+    }
 }

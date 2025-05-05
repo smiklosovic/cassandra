@@ -27,6 +27,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.CqlBuilder;
 import org.apache.cassandra.db.TypeSizes;
@@ -274,13 +276,7 @@ public class ColumnConstraints extends ColumnConstraint<ColumnConstraints>
             List<ColumnConstraint<?>> columnConstraints = new ArrayList<>();
             int numberOfConstraints = in.readInt();
             for (int i = 0; i < numberOfConstraints; i++)
-            {
-                int serializerPosition = in.readShort();
-                ColumnConstraint<?> constraint = (ColumnConstraint<?>) ConstraintType
-                                                                       .getSerializer(serializerPosition)
-                                                                       .deserialize(in, version);
-                columnConstraints.add(constraint);
-            }
+                columnConstraints.add(deserializeConstraint(in, in.readShort(), version));
 
             // we are not setting column name here on purpose
             // that is deffered in ColumnMetadata's constructor,
@@ -298,6 +294,14 @@ public class ColumnConstraints extends ColumnConstraint<ColumnConstraints>
                 constraintsSize += constraint.serializer().serializedSize(constraint, version);
             }
             return constraintsSize;
+        }
+
+        @VisibleForTesting
+        public ColumnConstraint<?> deserializeConstraint(DataInputPlus in, int serializerPosition, Version version) throws IOException
+        {
+            return (ColumnConstraint<?>) ConstraintType
+                                         .getSerializer(serializerPosition)
+                                         .deserialize(in, version);
         }
     }
 

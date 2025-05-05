@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.Operator;
 import org.apache.cassandra.cql3.constraints.SatisfiabilityChecker.UnaryFunctionSatisfiabilityChecker;
@@ -71,8 +73,7 @@ public class UnaryFunctionColumnConstraint extends AbstractFunctionConstraint<Un
     public enum Functions implements UnaryFunctionSatisfiabilityChecker
     {
         NOT_NULL(NotNullConstraint::new),
-        JSON(JsonConstraint::new),
-        ENUM(Enumeration::new); // TODO DO NOT COMMIT
+        JSON(JsonConstraint::new);
 
         private final Function<List<String>, ConstraintFunction> functionCreator;
 
@@ -105,6 +106,11 @@ public class UnaryFunctionColumnConstraint extends AbstractFunctionConstraint<Un
     public String name()
     {
         return function.name;
+    }
+
+    public ConstraintFunction function()
+    {
+        return function;
     }
 
     @Override
@@ -190,7 +196,7 @@ public class UnaryFunctionColumnConstraint extends AbstractFunctionConstraint<Un
             ConstraintFunction function;
             try
             {
-                function = createConstraintFunction(functionName, args);
+                function = getConstraintFunction(functionName, args);
             }
             catch (Exception e)
             {
@@ -198,6 +204,12 @@ public class UnaryFunctionColumnConstraint extends AbstractFunctionConstraint<Un
             }
 
             return new UnaryFunctionColumnConstraint(function);
+        }
+
+        @VisibleForTesting
+        public ConstraintFunction getConstraintFunction(String functionName, List<String> args)
+        {
+            return createConstraintFunction(functionName, args);
         }
 
         @Override

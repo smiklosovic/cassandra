@@ -30,21 +30,32 @@ Altering a constraint is done by following the alter column CQL syntax:
 ALTER TABLE [IF EXISTS] <table> ALTER [IF EXISTS] <column> CHECK <condition>;
 ----
 
+There is no way how to alter individual check when multiple checks are specified on a column. Altering constraints
+on a column will set constraints to these specified checks. A user can, of course, chain them:
+
+[source,bnf]
+----
+ALTER TABLE [IF EXISTS] <table> ALTER [IF EXISTS] <column> CHECK <condition> AND <condition2>
+----
+
 == DROP CONSTRAINT
-And DROP can be used to drop constraints for a column as well.
+`DROP CHECK` can be used to drop constraints for a column as well.
 [source,bnf]
 ----
 ALTER TABLE [IF EXISTS] <table> ALTER [IF EXISTS] <column> DROP CHECK;
 ----
 
+There is no way how to drop individual check when multiple checks are specified on a column. After dropping checks, you
+are required to re-define all necessary checks again.
+
 == AVAILABLE CONSTRAINTS
 
 === SCALAR CONSTRAINT
 
-Defines a comparator against a numeric type. It support all numeric types supported in Cassandra, with all the regular
+Defines a comparator against a numeric type. It supports all numeric types supported in Cassandra, with all regular
 comparators.
 
-For example, we can define constraints that ensure that i is bigger or equal than 100 but smaller than 1000.
+For example, we can define constraints that ensure that `i` is bigger or equal than `100` but smaller than `1000`.
 
 [source,bnf]
 ----
@@ -97,6 +108,39 @@ CREATE TABLE ks.tb
 )
 ----
 
+There is a basic satistfiability check conducted on checks' definitions so we ensure that unsatisfiable constraint
+definitions are invalid as it would be impossible to insert a value for a specific colum which would satisty all constraints.
+
+For example, imagine a user tries to create the following table (e.g. by mistake):
+
+----
+CREATE TABLE ks.tb (
+	name text,
+	i int CHECK i < 100 AND i > 1000
+	...,
+);
+----
+
+If we insert `50` for `i`, it will not satisfy `i > 1000`. If we insert `1001` as `i`, it will not satisfy `i < 100`.
+
+There is a satisfiability check in place which would prevent such constaint definitions:
+
+----
+[Invalid query] message="Constraints of scalar are not satisfiable: i < 100, i > 1000"
+----
+
+It is also illegal to specify constraints which are repeating, or they repeat on their operators:
+
+----
+CREATE TABLE ks.tb7 (id int primary key, i int check i < 100 and i > 1000 and i < 10) ;
+[Invalid query] message="There are duplicate constraint definitions on column 'i': [i <]"
+----
+
+----
+CREATE TABLE ks.tb7 (id int primary key, i int check i > 100 and i > 1000) ;
+[Invalid query] message="There are duplicate constraint definitions on column 'i': [i >]"
+----
+
 === LENGTH CONSTRAINT
 
 Defines a condition that checks the length of text or binary type.
@@ -137,18 +181,18 @@ CREATE TABLE ks.tb (
 
 Inserting a valid row:
 ----
-INSERT INTO ks.tb (name) VALUES ("f")
+INSERT INTO ks.tb (name) VALUES ('f')
 ----
 
 Inserting an invalid row:
 ----
-INSERT INTO ks.tb (name) VALUES ("fooooooo")
+INSERT INTO ks.tb (name) VALUES ('fooooooo')
 
 ERROR: Column value does not satisfy value constraint for column 'name'. It has a length of 8 and
 and it should be should be < 2
 ----
 
-=== NOT_NULL constraint
+=== NOT NULL constraint
 
 Defines a constraint that checks if a column is not null in every modification statement.
 
@@ -164,7 +208,27 @@ CREATE TABLE ks.tb (
 );
 ----
 
-then this statement would fail:
+It is possible to specify `NOT NULL` before `CHECK` / omit it to be more aligned with SQL syntax.
+
+----
+CREATE TABLE ks.tb (
+    id int,
+    cl int,
+    col1 int NOT NULL,
+    col2 int NOT NULL,
+    PRIMARY KEY (id, cl)
+);
+----
+
+Of course, mixing these two styles is forbidden:
+
+----
+-- this is illegal
+col1 int NOT NULL CHECK NOT NULL,
+[Invalid query] message="Duplicate definition of NOT NULL constraint"
+----
+
+When `NOT NULL` is specified as above, then this statement would fail:
 
 ----
 INSERT INTO ks.tb (id, cl, col1) VALUES (1, 2, 3);
@@ -177,7 +241,7 @@ as well as this statement:
 INSERT INTO ks.tb (id, cl, col1, col2) VALUES (1, 2, 3, null);
 ----
 
-A column which has `NOT_NULL` constraint has to be specified in every modification statement.
+A column which has `NOT NULL` constraint has to be specified in every modification statement.
 
 The constraint can be removed:
 
@@ -186,15 +250,54 @@ ALTER TABLE ks.tb ALTER col1 DROP CHECK;
 ALTER TABLE ks.tb ALTER col2 DROP CHECK;
 ----
 
-We can not remove the value of a column where `NOT_NULL` constraint is present:
+We can not remove the value of a column where `NOT NULL` constraint is present:
 
 ----
 DELETE col2 FROM ks.tb WHERE id = 1 AND cl = 2;
 ... [Invalid query] message="Column 'col2' can not be set to null."
 ----
 
-Additionally, `NOT_NULL` can not be specified on any column of a primary key,
+Additionally, `NOT NULL` can not be specified on any column of a primary key,
 being it a partition key or a clustering column.
+
+It is possible to chain `NOT NULL` with other checks, for example, if we require a column to not be null and its
+size to be bigger than `0` every time, we do:
+
+----
+CREATE TABLE ks.tb (
+    id int,
+    cl int,
+    col1 int CHECK NOT NULL AND col1 > 0,
+    PRIMARY KEY (id, cl)
+);
+----
+
+As we said that `NOT NULL` can be put in front of `CHECK`, if we want to specify other constraints as well,
+this syntax is indeed possible:
+
+----
+CREATE TABLE ks.tb (
+    id int,
+    cl int,
+    col1 int NOT NULL CHECK col1 > 0,
+    PRIMARY KEY (id, cl)
+);
+----
+
+Internally, `NOT NULL` specified before `CHECK` will be stored as any other check - that is after `CHECK`.
+(`DESCRIBE` statement on a table will show this fact). This mean of constraint definition is just a syntax suggar.
+
+It is not possible to use `NOT NULL` before `CHECK` when altering. The following syntax is invalid:
+
+----
+ALTER TABLE ks.tb ALTER col2 NOT NULL CHECK col2 > 0;
+----
+
+However, this syntax is valid:
+
+----
+ALTER TABLE ks.tb ALTER col2 CHECK NOT NULL AND col2 > 0;
+----
 
 === JSON constraint
 
@@ -235,8 +338,8 @@ CREATE TABLE ks.tb (
 ----
 
 ----
-cassandra@cqlsh> INSERT INTO ks.tb (id , value ) VALUES ( 1, 'asdadasdabb');
-cassandra@cqlsh> INSERT INTO ks.tb (id , value ) VALUES ( 1, 'aaaaa');
+INSERT INTO ks.tb (id , value ) VALUES ( 1, 'asdadasdabb');
+INSERT INTO ks.tb (id , value ) VALUES ( 1, 'aaaaa');
 ... [Invalid query] message="Value does not match regular expression 'a.*b'"
 ----
 
@@ -249,7 +352,9 @@ ALTER TABLE ks.tb ALTER value CHECK REGEXP() != 'a.*b';
 which would logically invert the condition:
 
 ----
-cassandra@cqlsh> INSERT INTO ks.tb (id , value ) VALUES ( 1, 'asdadasdabb');
+INSERT INTO ks.tb (id , value ) VALUES ( 1, 'asdadasdabb');
 ... [Invalid query] message="Value does match regular expression 'a.*b'"
-cassandra@cqlsh> INSERT INTO ks.tb (id , value ) VALUES ( 1, 'aaaaa');
+INSERT INTO ks.tb (id , value ) VALUES ( 1, 'aaaaa');
 ----
+
+`REGEXP` constraint supports only `!=` and `=` operators as other operators are meaningless.
