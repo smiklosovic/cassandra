@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.distributed.test;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 
@@ -31,6 +32,7 @@ import org.apache.cassandra.net.MessagingService;
 
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -107,7 +109,7 @@ public final class InternodeEncryptionEnforcementTest extends TestBaseImpl
     public void testConnectionsAreAcceptedWithValidConfig() throws Throwable
     {
         Cluster.Builder builder = builder()
-            .withNodes(2)
+            .withNodes(4)
             .withConfig(c ->
             {
                 c.with(Feature.NETWORK);
@@ -121,11 +123,16 @@ public final class InternodeEncryptionEnforcementTest extends TestBaseImpl
                 encryption.put("internode_encryption", "dc");
                 c.set("server_encryption_options", encryption);
             })
+
+            // two nodes in one dc and two other nodes in the second dc
             .withNodeIdTopology(ImmutableMap.of(1, NetworkTopology.dcAndRack("dc1", "r1a"),
-                                                2, NetworkTopology.dcAndRack("dc2", "r2a")));
+                                                2, NetworkTopology.dcAndRack("dc1", "r1a"),
+                                                3, NetworkTopology.dcAndRack("dc2", "r2a"),
+                                                4, NetworkTopology.dcAndRack("dc2", "r2a")));
 
         try (Cluster cluster = builder.start())
         {
+            // create some keyspace on each node to setup the paths
             openConnections(cluster);
 
             /*
@@ -138,24 +145,39 @@ public final class InternodeEncryptionEnforcementTest extends TestBaseImpl
                 List<MessagingService.SocketThread> threads = MessagingService.instance().getSocketThreads();
                 assertEquals(2, threads.size());
 
+                // for each node, there will be two ssl threads,
+                // e.g. for node 1 in dc2, there will be ssl thread to both nodes in dc1
+                // but no ssl thread to node 2 in dc2 (hence 1 plain thread).
+                // this is all because we have "internode_encryption: dc" which
+                // encrypts cross-dc communication only so that one node will
+                // ever need to talk securely to both nodes in the other dc only.
                 MessagingService.SocketThread sslThread = threads.get(0);
-                assertEquals(1, sslThread.connections.size());
+                assertEquals(2, sslThread.connections.size());
 
+                // 1 plain thread for a node in a same dc this runnable is run on
                 MessagingService.SocketThread plainThread = threads.get(1);
-                assertEquals(0, plainThread.connections.size());
+                assertEquals(1, plainThread.connections.size());
             };
 
             cluster.get(1).runOnInstance(runnable);
             cluster.get(2).runOnInstance(runnable);
+            cluster.get(3).runOnInstance(runnable);
+            cluster.get(4).runOnInstance(runnable);
         }
     }
 
     private void openConnections(Cluster cluster)
     {
         cluster.schemaChange("CREATE KEYSPACE test_connections_from_1 " +
-                             "WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 2};", false, cluster.get(1));
+                             "WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 2, 'dc2': 2};", false, cluster.get(1));
 
         cluster.schemaChange("CREATE KEYSPACE test_connections_from_2 " +
-                             "WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 2};", false, cluster.get(2));
+                             "WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 2, 'dc2': 2};", false, cluster.get(2));
+
+        cluster.schemaChange("CREATE KEYSPACE test_connections_from_3 " +
+                             "WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 2, 'dc2': 2};", false, cluster.get(3));
+
+        cluster.schemaChange("CREATE KEYSPACE test_connections_from_4 " +
+                             "WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 2, 'dc2': 2};", false, cluster.get(4));
     }
 }
