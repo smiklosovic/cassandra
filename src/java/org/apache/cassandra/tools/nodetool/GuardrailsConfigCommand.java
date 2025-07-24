@@ -23,6 +23,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -40,6 +41,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.airlift.airline.Arguments;
 import io.airlift.airline.Command;
 import io.airlift.airline.Option;
+import org.apache.cassandra.db.guardrails.GuardrailsCache;
 import org.apache.cassandra.db.guardrails.GuardrailsMBean;
 import org.apache.cassandra.tools.NodeProbe;
 import org.apache.cassandra.tools.NodeTool;
@@ -81,7 +83,17 @@ public abstract class GuardrailsConfigCommand extends NodeTool.NodeToolCmd
             if (guardrailName != null && categoryEnum != null)
                 throw new IllegalStateException("Do not specify additional arguments when --category/-c is set.");
 
-            Map<String, List<Method>> allGetters = parseGuardrailNames(probe.getGuardrailsMBean().getClass().getDeclaredMethods(), guardrailName);
+            GuardrailsCache.instance.clientInitialisation(probe.getGuardrailsMBean());
+
+            Map<String, List<Method>> allGetters = GuardrailsCache.instance.getAllGetters();
+
+            if (guardrailName != null)
+            {
+                List<Method> methods = allGetters.get(guardrailName);
+                allGetters = new HashMap<>();
+                if (methods != null)
+                    allGetters.put(guardrailName, methods);
+            }
 
             if (allGetters.isEmpty())
             {
@@ -194,11 +206,11 @@ public abstract class GuardrailsConfigCommand extends NodeTool.NodeToolCmd
                 throw new IllegalStateException("No arguments.");
 
             String snakeCaseName = args.get(0);
+            GuardrailsCache.instance.clientInitialisation(probe.getGuardrailsMBean());
 
-            Method setter = getAllSetters(probe).entrySet().stream()
-                                                .findFirst()
-                                                .map(o -> o.getValue().get(0))
-                                                .orElseThrow(() -> new IllegalStateException(format("Guardrail %s not found.", snakeCaseName)));
+            Method setter = GuardrailsCache.instance.getSetter(snakeCaseName);
+            if (setter == null)
+                throw new IllegalStateException(format("Guardrail %s not found.", snakeCaseName));
 
             sanitizeArguments(setter, args);
             validateArguments(setter, snakeCaseName, args);
@@ -206,7 +218,7 @@ public abstract class GuardrailsConfigCommand extends NodeTool.NodeToolCmd
             List<String> methodArgs = args.subList(1, args.size());
             try
             {
-                setter.invoke(probe.getGuardrailsMBean(), prepareArguments(methodArgs, setter));
+                GuardrailsCache.instance.invoke(setter, prepareArguments(methodArgs, setter));
             }
             catch (Exception ex)
             {
@@ -232,23 +244,6 @@ public abstract class GuardrailsConfigCommand extends NodeTool.NodeToolCmd
                 else
                     constructRow(bucket, sanitizeSetterName(method), stream(method.getParameterTypes()).map(Class::getName).collect(toList()).toString());
             }
-        }
-
-        private Map<String, List<Method>> getAllSetters(NodeProbe probe)
-        {
-            return stream(probe.getGuardrailsMBean().getClass().getDeclaredMethods())
-                   .filter(method -> method.getName().startsWith("set") && !method.getName().endsWith("CSV"))
-                   .filter(method -> args.isEmpty() || args.contains(toSnakeCase(method.getName().substring(3))))
-                   .sorted(comparing(Method::getName))
-                   .collect(Collectors.groupingBy(method -> toSnakeCase(method.getName().substring(3))))
-                   .entrySet()
-                   .stream()
-                   .filter(p -> !ignored.contains(p.getKey()))
-                   .sorted(Map.Entry.comparingByKey())
-                   .collect(Collectors.toMap(Map.Entry::getKey,
-                                             Map.Entry::getValue,
-                                             (e1, e2) -> e1,
-                                             LinkedHashMap::new));
         }
 
         private String sanitizeSetterName(Method setter)
