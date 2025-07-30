@@ -242,6 +242,8 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                 {
                     public void onMergedPartitionLevelDeletion(DeletionTime mergedDeletion, DeletionTime[] versions)
                     {
+                        System.out.println("IS LIVE? " + mergedDeletion.isLive());
+                        System.out.println("on onMergedPartitionLevelDeletion");
                     }
 
                     public Row onMergedRows(Row merged, Row[] versions)
@@ -254,6 +256,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
 
                     public void onMergedRangeTombstoneMarkers(RangeTombstoneMarker mergedMarker, RangeTombstoneMarker[] versions)
                     {
+                        System.out.println("on onMergedRangeTombstoneMarkers");
                     }
 
                     public void close()
@@ -419,6 +422,8 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
 
             tombNext = advance(tombSource);
             dataNext = advance(dataSource);
+
+            System.out.println("IN GARBAGE SKIPPING ITERATOR");
         }
 
         private static Unfiltered advance(UnfilteredRowIterator source)

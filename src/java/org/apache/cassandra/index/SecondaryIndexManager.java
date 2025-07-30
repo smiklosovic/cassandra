@@ -1280,6 +1280,7 @@ public class SecondaryIndexManager implements IndexRegistry, INotificationConsum
 
         public void onUpdated(Row existing, Row updated)
         {
+            System.out.println("ON UPDATED?");
             final Row.Builder toRemove = BTreeRow.sortedBuilder();
             toRemove.newRow(existing.clustering());
             toRemove.addPrimaryKeyLivenessInfo(existing.primaryKeyLivenessInfo());
@@ -1380,6 +1381,7 @@ public class SecondaryIndexManager implements IndexRegistry, INotificationConsum
 
         public void onRowMerge(Row merged, Row... versions)
         {
+            System.out.println("ON ROW MERGED");
             // Diff listener constructs rows representing deltas between the merged and original versions
             // These delta rows are then passed to registered indexes for removal processing
             final Row.Builder[] builders = new Row.Builder[versions.length];
@@ -1387,20 +1389,27 @@ public class SecondaryIndexManager implements IndexRegistry, INotificationConsum
             {
                 public void onPrimaryKeyLivenessInfo(int i, Clustering<?> clustering, LivenessInfo merged, LivenessInfo original)
                 {
+                    System.out.println("ON PRIMARY KEY LIVENESS INFO");
                     if (original != null && (merged == null || !merged.isLive(nowInSec)))
+                    {
+                        System.out.println("INSIDE PRIMARY KEY LIVENESS INFO");
                         getBuilder(i, clustering).addPrimaryKeyLivenessInfo(original);
+                    }
                 }
 
                 public void onDeletion(int i, Clustering<?> clustering, Row.Deletion merged, Row.Deletion original)
                 {
+                    System.out.println("ON DELETION ?");
                 }
 
                 public void onComplexDeletion(int i, Clustering<?> clustering, ColumnMetadata column, DeletionTime merged, DeletionTime original)
                 {
+                    System.out.println("ON COMPLEX DELETION ?");
                 }
 
                 public void onCell(int i, Clustering<?> clustering, Cell<?> merged, Cell<?> original)
                 {
+                    System.out.println("ON CELL ?");
                     if (original != null && (merged == null || !merged.isLive(nowInSec)))
                         getBuilder(i, clustering).addCell(original);
                 }
@@ -1482,11 +1491,13 @@ public class SecondaryIndexManager implements IndexRegistry, INotificationConsum
 
         public void onPartitionDeletion(DeletionTime deletionTime)
         {
+            System.out.println("CLEANING UP ON PARTITION DELETION " + deletionTime + " " + key.toString());
             partitionDelete = deletionTime;
         }
 
         public void onRowDelete(Row row)
         {
+            System.out.println("CLEANING UP ON PARTITION DELETION");
             this.row = row;
         }
 

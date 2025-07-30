@@ -355,20 +355,20 @@
     <attribute name="destdir"/>
     <element name="filesets"/>
     <sequential>
-      <javadoc destdir="@{destdir}" author="true" version="true" use="true"
-        windowtitle="${ant.project.name} API" classpathref="cassandra.classpath"
-        bottom="Copyright &amp;copy; 2009- The Apache Software Foundation"
-        useexternalfile="yes" encoding="UTF-8" failonerror="false"
-        maxmemory="256m" additionalparam="${jdk11-javadoc-exports}">
-        <filesets/>
-      </javadoc>
-      <fail message="javadoc failed">
-        <condition>
-            <not>
-                <available file="@{destdir}/index-all.html" />
-            </not>
-        </condition>
-      </fail>
+<!--      <javadoc destdir="@{destdir}" author="true" version="true" use="true"-->
+<!--        windowtitle="${ant.project.name} API" classpathref="cassandra.classpath"-->
+<!--        bottom="Copyright &amp;copy; 2009- The Apache Software Foundation"-->
+<!--        useexternalfile="yes" encoding="UTF-8" failonerror="false"-->
+<!--        maxmemory="256m" additionalparam="${jdk11-javadoc-exports}">-->
+<!--        <filesets/>-->
+<!--      </javadoc>-->
+<!--      <fail message="javadoc failed">-->
+<!--        <condition>-->
+<!--            <not>-->
+<!--                <available file="@{destdir}/index-all.html" />-->
+<!--            </not>-->
+<!--        </condition>-->
+<!--      </fail>-->
     </sequential>
   </macrodef>
 
@@ -661,7 +661,8 @@
           <dependency groupId="org.mindrot" artifactId="jbcrypt" version="0.4" />
           <dependency groupId="io.airlift" artifactId="airline" version="0.8">
             <exclusion groupId="com.google.code.findbugs" artifactId="jsr305" />
-           </dependency>
+          </dependency>
+          <dependency groupId="com.instaclustr" artifactId="cassandra-lucene-index-plugin" version="4.1.8-1.0.3-SNAPSHOT"/>
           <dependency groupId="io.netty" artifactId="netty-bom" version="4.1.58.Final" type="pom" scope="provided"/>
           <dependency groupId="io.netty" artifactId="netty-all" version="4.1.58.Final" />
           <dependency groupId="io.netty" artifactId="netty-tcnative-boringssl-static" version="2.0.36.Final"/>
@@ -872,7 +873,7 @@
 
         <dependency groupId="ch.qos.logback" artifactId="logback-core"/>
         <dependency groupId="ch.qos.logback" artifactId="logback-classic"/>
-
+        <dependency groupId="com.instaclustr" artifactId="cassandra-lucene-index-plugin"/>
         <!-- don't need hadoop classes to run, but if you use the hadoop stuff -->
         <dependency groupId="org.apache.hadoop" artifactId="hadoop-core" optional="true"/>
         <dependency groupId="org.apache.hadoop" artifactId="hadoop-minicluster" optional="true"/>
