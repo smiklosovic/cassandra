@@ -1381,7 +1381,14 @@ public class SecondaryIndexManager implements IndexRegistry, INotificationConsum
 
         public void onRowMerge(Row merged, Row... versions)
         {
-            System.out.println("ON ROW MERGED");
+            System.out.println("ON ROW MERGED " + merged);
+            if (versions != null)
+            {
+                for (Row row : versions)
+                {
+                    System.out.println("VERSIONS " + row);
+                }
+            }
             // Diff listener constructs rows representing deltas between the merged and original versions
             // These delta rows are then passed to registered indexes for removal processing
             final Row.Builder[] builders = new Row.Builder[versions.length];
@@ -1411,7 +1418,9 @@ public class SecondaryIndexManager implements IndexRegistry, INotificationConsum
                 {
                     System.out.println("ON CELL ?");
                     if (original != null && (merged == null || !merged.isLive(nowInSec)))
+                    {
                         getBuilder(i, clustering).addCell(original);
+                    }
                 }
 
                 private Row.Builder getBuilder(int index, Clustering<?> clustering)
@@ -1435,7 +1444,10 @@ public class SecondaryIndexManager implements IndexRegistry, INotificationConsum
         public void commit()
         {
             if (rows == null)
+            {
+                System.out.println("ROWS IS NULL");
                 return;
+            }
 
             try (WriteContext ctx = keyspace.getWriteHandler().createContextForIndexing())
             {
@@ -1445,10 +1457,21 @@ public class SecondaryIndexManager implements IndexRegistry, INotificationConsum
                     if (indexer == null)
                         continue;
 
+                    System.out.println("ROWS SIZE " + rows.length);
+
                     indexer.begin();
                     for (Row row : rows)
+                    {
                         if (row != null)
+                        {
                             indexer.removeRow(row);
+                        }
+                        else
+                        {
+                            System.out.println("row is null");
+                        }
+                    }
+
                     indexer.finish();
                 }
             }

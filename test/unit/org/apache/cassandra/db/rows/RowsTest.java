@@ -64,7 +64,8 @@ public class RowsTest
                          .addPartitionKeyColumn("k", IntegerType.instance)
                          .addClusteringColumn("c", IntegerType.instance)
                          .addRegularColumn("v", IntegerType.instance)
-                         .addRegularColumn("m", MapType.getInstance(IntegerType.instance, IntegerType.instance, true))
+                         .addRegularColumn("m", IntegerType.instance)
+                         //.addRegularColumn("m", MapType.getInstance(IntegerType.instance, IntegerType.instance, true))
                          .build();
 
         v = kcvm.getColumn(new ColumnIdentifier("v", false));
@@ -533,6 +534,37 @@ public class RowsTest
         assert ttl != Cell.NO_TTL;
         return new BufferCell(column, timestamp, ttl, localDeletionTime, value, path);
     }
+
+    @Test
+    public void abc()
+    {
+        int now1 = FBUtilities.nowInSeconds();
+        long ts1 = secondToTs(now1);
+        int ldt = now1 + 1000;
+
+        Row.Builder r1Builder = BTreeRow.unsortedBuilder();
+        r1Builder.newRow(c1);
+        r1Builder.addCell(BufferCell.live(v, ts1, BB2));
+        LivenessInfo originalLiveness = LivenessInfo.withExpirationTime(ts1, 15, ldt);
+        r1Builder.addPrimaryKeyLivenessInfo(originalLiveness);
+
+        Row.Builder r2Builder = BTreeRow.unsortedBuilder();
+        r2Builder.newRow(c1);
+        r2Builder.addCell(BufferCell.live(m, ts1, BB2));
+        LivenessInfo originalLiveness2 = LivenessInfo.create(ts1 + 100, now1);
+        r2Builder.addPrimaryKeyLivenessInfo(originalLiveness2);
+
+        Row r1 = r1Builder.build();
+        Row r2 = r2Builder.build();
+
+        Row r1r2 = Rows.merge(r1, r2);
+
+        DiffListener mergedListener = new DiffListener();
+        Rows.diff(mergedListener, r1r2, r1, r2);
+
+        System.out.println(mergedListener);
+    }
+
 
     @Test
     public void mergeRowsWithSameExpiryDifferentTTLCommutesLiveness()
