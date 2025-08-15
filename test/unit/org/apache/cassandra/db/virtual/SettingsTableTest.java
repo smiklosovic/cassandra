@@ -18,6 +18,7 @@
 
 package org.apache.cassandra.db.virtual;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ import org.junit.Test;
 
 import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.Row;
+import org.apache.cassandra.config.CassandraRelevantProperties;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.Redacted;
 import org.apache.cassandra.config.DefaultLoader;
@@ -42,7 +44,11 @@ import org.apache.cassandra.config.JMXServerOptions;
 import org.apache.cassandra.config.ParameterizedClass;
 import org.apache.cassandra.config.TransparentDataEncryptionOptions;
 import org.apache.cassandra.cql3.CQLTester;
+import org.apache.cassandra.distributed.shared.WithProperties;
 import org.apache.cassandra.security.SSLFactory;
+import org.apache.cassandra.utils.JsonUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.introspector.Property;
 
 import static org.apache.cassandra.config.EncryptionOptions.ClientEncryptionOptions.ClientAuth.REQUIRED;
@@ -50,6 +56,7 @@ import static java.util.stream.Collectors.toMap;
 
 public class SettingsTableTest extends CQLTester
 {
+    private static final Logger logger = LoggerFactory.getLogger(SettingsTableTest.class);
     private static final String KS_NAME = "vts";
 
     private Config config;
@@ -88,7 +95,7 @@ public class SettingsTableTest extends CQLTester
     public void testArray() throws Throwable
     {
         Row one = executeNet("SELECT value FROM vts.settings WHERE name = 'data_file_directories'").one();
-        Assert.assertEquals("[/my/data/directory, /another/data/directory]", one.getString("value"));
+        Assert.assertEquals("[\"/my/data/directory\",\"/another/data/directory\"]", one.getString("value"));
     }
 
     @Test
@@ -201,23 +208,30 @@ public class SettingsTableTest extends CQLTester
 
         check(pre + "cipher_suites", null);
         config.server_encryption_options = serverEncryptionOptionsBuilder.withCipherSuites("c1", "c2").build();
-        check(pre + "cipher_suites", "[c1, c2]");
+        check(pre + "cipher_suites", "[\"c1\",\"c2\"]");
 
         // name doesn't match yaml
         check(pre + "protocol", null);
         config.server_encryption_options = serverEncryptionOptionsBuilder.withProtocol("TLSv5").build();
-        check(pre + "protocol", "[TLSv5]");
+        check(pre + "protocol", "[\"TLSv5\"]");
 
         config.server_encryption_options = serverEncryptionOptionsBuilder.withProtocol("TLS").build();
-        check(pre + "protocol", SSLFactory.tlsInstanceProtocolSubstitution().toString());
+        try
+        {
+            check(pre + "protocol", JsonUtils.JSON_OBJECT_MAPPER.writeValueAsString(SSLFactory.tlsInstanceProtocolSubstitution()));
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException("Failed to serialize TLS protocols as JSON", e);
+        }
 
         config.server_encryption_options = serverEncryptionOptionsBuilder.withProtocol("TLS").build();
         config.server_encryption_options = serverEncryptionOptionsBuilder.withAcceptedProtocols(ImmutableList.of("TLSv1.2","TLSv1.1")).build();
-        check(pre + "protocol", "[TLSv1.2, TLSv1.1]");
+        check(pre + "protocol", "[\"TLSv1.2\",\"TLSv1.1\"]");
 
         config.server_encryption_options = serverEncryptionOptionsBuilder.withProtocol("TLSv2").build();
         config.server_encryption_options = serverEncryptionOptionsBuilder.withAcceptedProtocols(ImmutableList.of("TLSv1.2","TLSv1.1")).build();
-        check(pre + "protocol", "[TLSv1.2, TLSv1.1, TLSv2]"); // protocol goes after the explicit accept list if non-TLS
+        check(pre + "protocol", "[\"TLSv1.2\",\"TLSv1.1\",\"TLSv2\"]"); // protocol goes after the explicit accept list if non-TLS
 
         check(pre + "optional", "false");
         config.server_encryption_options = serverEncryptionOptionsBuilder.withOptional(true).build();
@@ -351,5 +365,49 @@ public class SettingsTableTest extends CQLTester
 
         Assert.assertEquals(settingName, name);
         Assert.assertEquals(expectedValue, value);
+    }
+
+    @Test
+    public void testMapSerialization() throws Throwable
+    {
+        Map<String, String> parameters = new HashMap<>();
+        parameters.put("seeds", "127.0.0.1:7000");
+        parameters.put("timeout", "30000");
+        ParameterizedClass seedProvider = new ParameterizedClass("org.apache.cassandra.locator.SimpleSeedProvider", parameters);
+        
+        config.seed_provider = seedProvider;
+        
+        try
+        {
+            String expectedJson = JsonUtils.JSON_OBJECT_MAPPER.writeValueAsString(parameters);
+            check("seed_provider.parameters", expectedJson);
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException("Failed to serialize seed provider parameters as JSON", e);
+        }
+    }
+
+    @Test
+    public void testComplexSettingsFormatProperty() throws Throwable
+    {
+        Map<String, String> parameters = new HashMap<>();
+        parameters.put("seeds", "127.0.0.1:7000");
+        config.seed_provider = new ParameterizedClass("org.apache.cassandra.locator.SimpleSeedProvider", parameters);
+        
+        // Test unset property (default JSON format)
+        check("data_file_directories", "[\"/my/data/directory\",\"/another/data/directory\"]");
+        check("seed_provider.parameters", "{\"seeds\":\"127.0.0.1:7000\"}");
+        
+        // Test set property to false (toString format)
+        try (WithProperties properties = new WithProperties().set(CassandraRelevantProperties.VIRTUAL_TABLE_COMPLEX_SETTINGS_FORMAT_JSON, "false"))
+        {
+            VirtualKeyspaceRegistry.instance.unregister(new VirtualKeyspace(KS_NAME, ImmutableList.of(table)));
+            table = new SettingsTable(KS_NAME, config);
+            VirtualKeyspaceRegistry.instance.register(new VirtualKeyspace(KS_NAME, ImmutableList.of(table)));
+            
+            check("data_file_directories", "[/my/data/directory, /another/data/directory]");
+            check("seed_provider.parameters", "{seeds=127.0.0.1:7000}");
+        }
     }
 }
