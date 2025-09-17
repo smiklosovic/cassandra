@@ -177,17 +177,22 @@ public class SettingsTableTest extends CQLTester
         assertRowsNet(executeNet(q), new Object[] {"credentials_update_interval_in_ms", "-1"});
     }
 
-    private void check(String setting, String expected) throws Throwable
+    private void check(String keyspaceTable, String setting, String expected)
     {
-        String q = "SELECT * FROM vts.settings WHERE name = '"+setting+'\'';
+        String q = "SELECT * FROM " + keyspaceTable + " WHERE name = '" + setting + '\'';
         try
         {
-            assertRowsNet(executeNet(q), new Object[] {setting, expected});
+            assertRowsNet(executeNet(q), new Object[]{ setting, expected });
         }
         catch (AssertionError e)
         {
             throw new AssertionError(e.getMessage() + " for query " + q);
         }
+    }
+
+    private void check(String setting, String expected)
+    {
+        check("vts.settings", setting, expected);
     }
 
     @Test
@@ -335,7 +340,7 @@ public class SettingsTableTest extends CQLTester
     public void testRedaction()
     {
         assertValue("transparent_data_encryption_options.key_provider.parameters",
-                    String.format("{keystore_password=%s, keystore=conf/.keystore, key_password=%s}",
+                    String.format("{\"keystore_password\":\"%s\",\"keystore\":\"conf/.keystore\",\"key_password\":\"%s\"}",
                                   Redacted.REDACTED_STRING,
                                   Redacted.REDACTED_STRING));
 
@@ -368,46 +373,30 @@ public class SettingsTableTest extends CQLTester
     }
 
     @Test
-    public void testMapSerialization() throws Throwable
-    {
-        Map<String, String> parameters = new HashMap<>();
-        parameters.put("seeds", "127.0.0.1:7000");
-        parameters.put("timeout", "30000");
-        ParameterizedClass seedProvider = new ParameterizedClass("org.apache.cassandra.locator.SimpleSeedProvider", parameters);
-        
-        config.seed_provider = seedProvider;
-        
-        try
-        {
-            String expectedJson = JsonUtils.JSON_OBJECT_MAPPER.writeValueAsString(parameters);
-            check("seed_provider.parameters", expectedJson);
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException("Failed to serialize seed provider parameters as JSON", e);
-        }
-    }
-
-    @Test
-    public void testComplexSettingsFormatProperty() throws Throwable
+    public void testComplexSettingsFormatProperty()
     {
         Map<String, String> parameters = new HashMap<>();
         parameters.put("seeds", "127.0.0.1:7000");
         config.seed_provider = new ParameterizedClass("org.apache.cassandra.locator.SimpleSeedProvider", parameters);
-        
-        // Test unset property (default JSON format)
-        check("data_file_directories", "[\"/my/data/directory\",\"/another/data/directory\"]");
-        check("seed_provider.parameters", "{\"seeds\":\"127.0.0.1:7000\"}");
-        
+
+        // Test set property to true (collection as json)
+        try (WithProperties properties = new WithProperties().set(CassandraRelevantProperties.VIRTUAL_TABLE_COMPLEX_SETTINGS_FORMAT_JSON, "true"))
+        {
+            table = new SettingsTable("json_true", config);
+            VirtualKeyspaceRegistry.instance.register(new VirtualKeyspace("json_true", ImmutableList.of(table)));
+
+            check("json_true.settings", "data_file_directories", "[\"/my/data/directory\",\"/another/data/directory\"]");
+            check("json_true.settings", "seed_provider.parameters", "{\"seeds\":\"127.0.0.1:7000\"}");
+        }
+
         // Test set property to false (toString format)
         try (WithProperties properties = new WithProperties().set(CassandraRelevantProperties.VIRTUAL_TABLE_COMPLEX_SETTINGS_FORMAT_JSON, "false"))
         {
-            VirtualKeyspaceRegistry.instance.unregister(new VirtualKeyspace(KS_NAME, ImmutableList.of(table)));
-            table = new SettingsTable(KS_NAME, config);
-            VirtualKeyspaceRegistry.instance.register(new VirtualKeyspace(KS_NAME, ImmutableList.of(table)));
-            
-            check("data_file_directories", "[/my/data/directory, /another/data/directory]");
-            check("seed_provider.parameters", "{seeds=127.0.0.1:7000}");
+            table = new SettingsTable("json_false", config);
+            VirtualKeyspaceRegistry.instance.register(new VirtualKeyspace("json_false", ImmutableList.of(table)));
+
+            check("json_false.settings", "data_file_directories", "[/my/data/directory, /another/data/directory]");
+            check("json_false.settings", "seed_provider.parameters", "{seeds=127.0.0.1:7000}");
         }
     }
 }
