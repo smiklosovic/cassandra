@@ -263,8 +263,8 @@ public final class ColumnMetadata extends ColumnSpecification implements Selecta
                           Kind kind,
                           @Nullable ColumnMask mask,
                           @Nonnull ColumnConstraints columnConstraints,
-                          @Nullable String comment,
-                          @Nullable String securityLabel)
+                          String comment,
+                          String securityLabel)
     {
         super(ksName, cfName, name, type, comment, securityLabel);
         this.uniqueId = uniqueId;

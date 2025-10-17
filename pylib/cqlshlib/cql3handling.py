@@ -409,6 +409,8 @@ JUNK ::= /([ \t\r\f\v]+|(--|[/][/])[^\n\r]*([\n\r]|$)|[/][*].*?[*][/])/ ;
                     ;
 <propertyOrOption> ::= <property>
                      | "INDEXES"
+                     | "COMMENTS"
+                     | "SECURITY" "LABELS"
                      ;
 
 '''
