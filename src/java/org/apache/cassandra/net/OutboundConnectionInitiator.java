@@ -460,7 +460,7 @@ public class OutboundConnectionInitiator<SuccessType extends OutboundConnectionI
          * Describes the result of receiving the response back from the peer (Message 2 of the handshake)
          * and implies an action that should be taken.
          */
-        enum Outcome
+        public enum Outcome
         {
             SUCCESS, RETRY, INCOMPATIBLE
         }
@@ -495,9 +495,10 @@ public class OutboundConnectionInitiator<SuccessType extends OutboundConnectionI
             }
         }
 
-        static class Retry<SuccessType extends Success> extends Result<SuccessType>
+        @VisibleForTesting
+        public static class Retry<SuccessType extends Success> extends Result<SuccessType>
         {
-            final int withMessagingVersion;
+            public final int withMessagingVersion;
             Retry(int withMessagingVersion)
             {
                 super(Outcome.RETRY);
@@ -505,10 +506,11 @@ public class OutboundConnectionInitiator<SuccessType extends OutboundConnectionI
             }
         }
 
-        static class Incompatible<SuccessType extends Success> extends Result<SuccessType>
+        @VisibleForTesting
+        public static class Incompatible<SuccessType extends Success> extends Result<SuccessType>
         {
-            final int closestSupportedVersion;
-            final int maxMessagingVersion;
+            public final int closestSupportedVersion;
+            public final int maxMessagingVersion;
             Incompatible(int closestSupportedVersion, int maxMessagingVersion)
             {
                 super(Outcome.INCOMPATIBLE);
@@ -524,9 +526,17 @@ public class OutboundConnectionInitiator<SuccessType extends OutboundConnectionI
             this.outcome = outcome;
         }
 
-        boolean isSuccess() { return outcome == Outcome.SUCCESS; }
+        public Outcome outcome()
+        {
+            return outcome;
+        }
+
+        public boolean isSuccess() { return outcome == Outcome.SUCCESS; }
+        public boolean isRetry() { return outcome == Outcome.RETRY; }
+        public boolean isIncompatible() { return outcome == Outcome.INCOMPATIBLE; }
+
         public Success success() {
-            if (this.outcome == outcome.SUCCESS)
+            if (isSuccess())
                 return (Success) this;
             return null;
         }
@@ -534,7 +544,7 @@ public class OutboundConnectionInitiator<SuccessType extends OutboundConnectionI
         static StreamingSuccess streamingSuccess(Channel channel, int messagingVersion) { return new StreamingSuccess(channel, messagingVersion); }
 
         public Retry retry() {
-            if (this.outcome == outcome.RETRY)
+            if (isRetry())
                 return (Retry) this;
             return null;
         }
@@ -542,7 +552,7 @@ public class OutboundConnectionInitiator<SuccessType extends OutboundConnectionI
 
         public Incompatible incompatible()
         {
-            if (this.outcome == outcome.INCOMPATIBLE)
+            if (isIncompatible())
                 return (Incompatible) this;
             return null;
         }

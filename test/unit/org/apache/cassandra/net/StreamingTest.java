@@ -18,48 +18,29 @@
 
 package org.apache.cassandra.net;
 
-import java.nio.channels.ClosedChannelException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 
-import com.google.common.net.InetAddresses;
 import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import io.netty.channel.EventLoop;
-import io.netty.util.concurrent.Future;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.EncryptionOptions.ServerEncryptionOptions;
-import org.apache.cassandra.config.EncryptionOptions.ServerEncryptionOptions.Builder;
-import org.apache.cassandra.config.ParameterizedClass;
 import org.apache.cassandra.db.commitlog.CommitLog;
-import org.apache.cassandra.gms.GossipDigestSyn;
 import org.apache.cassandra.locator.InetAddressAndPort;
-import org.apache.cassandra.security.DefaultSslContextFactory;
-import org.apache.cassandra.transport.TlsTestUtils;
+import org.apache.cassandra.streaming.StreamingChannel;
+import org.apache.cassandra.streaming.async.NettyStreamingChannel;
+import org.apache.cassandra.streaming.async.NettyStreamingConnectionFactory;
 
-import static org.apache.cassandra.net.OutboundConnectionInitiator.Result;
-import static org.apache.cassandra.net.OutboundConnectionInitiator.SslFallbackConnectionType;
-import static org.apache.cassandra.net.OutboundConnectionInitiator.initiateStreaming;
 import static org.apache.cassandra.net.MessagingService.current_version;
 import static org.apache.cassandra.net.MessagingService.minimum_version;
-import static org.apache.cassandra.config.EncryptionOptions.ClientEncryptionOptions.ClientAuth.NOT_REQUIRED;
-import static org.apache.cassandra.config.EncryptionOptions.ClientEncryptionOptions.ClientAuth.REQUIRED;
-import static org.apache.cassandra.tcm.ClusterMetadata.EMPTY_METADATA_IDENTIFIER;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 public class StreamingTest
 {
     private static final SocketFactory factory = new SocketFactory();
-    static final InetAddressAndPort TO_ADDR = InetAddressAndPort.getByAddressOverrideDefaults(InetAddresses.forString("127.0.0.2"), 7012);
-    static final InetAddressAndPort FROM_ADDR = InetAddressAndPort.getByAddressOverrideDefaults(InetAddresses.forString("127.0.0.1"), 7012);
-    private volatile Throwable handshakeEx;
+
     @BeforeClass
     public static void startup()
     {
@@ -73,13 +54,25 @@ public class StreamingTest
         factory.shutdownNow();
     }
 
-    @Before
-    public void setup()
+    @Test
+    public void testIncompatibleVersion()
     {
-        handshakeEx = null;
+        AcceptVersions acceptOutbound = new AcceptVersions(current_version + 1, current_version + 1);
+        AcceptVersions acceptInbound = new AcceptVersions(minimum_version + 2, current_version + 3);
+        assertThatThrownBy(() -> streamingConnect(acceptOutbound, acceptInbound))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("failed to connect to /127.0.0.1:7012 for streaming data, outcome: incompatible, closest supported version: 14, max messaging version: 14");
     }
 
-    private Result<Result.StreamingSuccess> streamingConnect(AcceptVersions acceptOutbound, AcceptVersions acceptInbound) throws ExecutionException, InterruptedException
+    @Test
+    public void testCompatibleVersion() throws Throwable
+    {
+        AcceptVersions acceptOutbound = new AcceptVersions(MessagingService.minimum_version, current_version + 1);
+        AcceptVersions acceptInbound = new AcceptVersions(minimum_version + 2, current_version + 3);
+        streamingConnect(acceptOutbound, acceptInbound);
+    }
+
+    private NettyStreamingChannel streamingConnect(AcceptVersions acceptOutbound, AcceptVersions acceptInbound) throws Throwable
     {
         InboundSockets inbound = new InboundSockets(new InboundConnectionSettings().withAcceptMessaging(acceptInbound));
         try
@@ -87,114 +80,16 @@ public class StreamingTest
             inbound.open();
             InetAddressAndPort endpoint = inbound.sockets().stream().map(s -> s.settings.bindAddress).findFirst().get();
             EventLoop eventLoop = factory.defaultGroup().next();
-            Future<Result<Result.StreamingSuccess>> result = initiateStreaming(eventLoop,
-                    new OutboundConnectionSettings(endpoint)
-                            .withAcceptVersions(acceptOutbound)
-                            .withDefaults(ConnectionCategory.STREAMING),
-                    SslFallbackConnectionType.SERVER_CONFIG
-            );
-            result.awaitUninterruptibly();
-            Assert.assertTrue(result.isSuccess());
 
-            return result.getNow();
+            return NettyStreamingConnectionFactory.connect(eventLoop,
+                                                           new OutboundConnectionSettings(endpoint)
+                                                           .withAcceptVersions(acceptOutbound)
+                                                           .withDefaults(ConnectionCategory.STREAMING), 5,
+                                                           StreamingChannel.Kind.FILE);
         }
         finally
         {
             inbound.close().await(1L, TimeUnit.SECONDS);
-        }
-    }
-
-    @Test
-    public void testIncompatibleVersion() throws InterruptedException, ExecutionException
-    {
-        Result<Result.StreamingSuccess> nowResult = streamingConnect(new AcceptVersions(current_version + 1, current_version + 1), new AcceptVersions(minimum_version + 2, current_version + 3));
-        Assert.assertNull(nowResult.success());
-        Assert.assertEquals(Result.Outcome.INCOMPATIBLE, nowResult.outcome);
-        Assert.assertEquals(current_version, nowResult.incompatible().closestSupportedVersion);
-        Assert.assertEquals(current_version, nowResult.incompatible().maxMessagingVersion);
-    }
-
-    @Test
-    public void testCompatibleVersion() throws InterruptedException, ExecutionException
-    {
-        Result<Result.StreamingSuccess> nowResult = streamingConnect(new AcceptVersions(MessagingService.minimum_version, current_version + 1), new AcceptVersions(minimum_version + 2, current_version + 3));
-        Assert.assertNotNull(nowResult.success());
-        Assert.assertNotNull(nowResult.success().channel);
-        Assert.assertEquals(Result.Outcome.SUCCESS, nowResult.outcome);
-        Assert.assertEquals(current_version, nowResult.success().messagingVersion);
-    }
-
-    private ServerEncryptionOptions getServerEncryptionOptions(SslFallbackConnectionType sslConnectionType, boolean optional)
-    {
-        Builder serverEncryptionOptionsBuilder = new Builder();
-
-        serverEncryptionOptionsBuilder.withOutboundKeystore(TlsTestUtils.SERVER_OUTBOUND_KEYSTORE_PATH)
-                .withOutboundKeystorePassword(TlsTestUtils.SERVER_OUTBOUND_KEYSTORE_PASSWORD)
-                .withOptional(optional)
-                .withKeyStore(TlsTestUtils.SERVER_KEYSTORE_PATH)
-                .withKeyStorePassword(TlsTestUtils.SERVER_KEYSTORE_PASSWORD)
-                .withTrustStore(TlsTestUtils.SERVER_TRUSTSTORE_PATH).withTrustStorePassword(TlsTestUtils.SERVER_TRUSTSTORE_PASSWORD)
-                .withSslContextFactory((new ParameterizedClass(DefaultSslContextFactory.class.getName(),
-                        new HashMap<>())));
-
-        if (sslConnectionType == SslFallbackConnectionType.MTLS)
-        {
-            serverEncryptionOptionsBuilder.withInternodeEncryption(ServerEncryptionOptions.InternodeEncryption.all)
-                    .withRequireClientAuth(REQUIRED);
-        }
-        else if (sslConnectionType == SslFallbackConnectionType.SSL)
-        {
-            serverEncryptionOptionsBuilder.withInternodeEncryption(ServerEncryptionOptions.InternodeEncryption.all)
-                    .withRequireClientAuth(NOT_REQUIRED);
-        }
-        return serverEncryptionOptionsBuilder.build();
-    }
-
-    private OutboundConnection initiateOutbound(InetAddressAndPort endpoint, SslFallbackConnectionType connectionType, boolean optional) throws ClosedChannelException
-    {
-        final OutboundConnectionSettings settings = new OutboundConnectionSettings(endpoint)
-                .withAcceptVersions(new AcceptVersions(minimum_version, current_version))
-                .withDefaults(ConnectionCategory.MESSAGING)
-                .withEncryption(getServerEncryptionOptions(connectionType, optional))
-                .withDebugCallbacks(new HandshakeAcknowledgeChecker(t -> handshakeEx = t))
-                .withFrom(FROM_ADDR);
-        OutboundConnections outboundConnections = OutboundConnections.tryRegister(new ConcurrentHashMap<>(), TO_ADDR, settings);
-        GossipDigestSyn syn = new GossipDigestSyn("cluster", "partitioner", EMPTY_METADATA_IDENTIFIER, new ArrayList<>(0));
-        Message<GossipDigestSyn> message = Message.out(Verb.GOSSIP_DIGEST_SYN, syn);
-        OutboundConnection outboundConnection = outboundConnections.connectionFor(message);
-        outboundConnection.enqueue(message);
-        return outboundConnection;
-    }
-    private static class HandshakeAcknowledgeChecker implements OutboundDebugCallbacks
-    {
-        private final AtomicInteger acks = new AtomicInteger(0);
-        private final Consumer<Throwable> fail;
-
-        private HandshakeAcknowledgeChecker(Consumer<Throwable> fail)
-        {
-            this.fail = fail;
-        }
-
-        @Override
-        public void onSendSmallFrame(int messageCount, int payloadSizeInBytes)
-        {
-        }
-
-        @Override
-        public void onSentSmallFrame(int messageCount, int payloadSizeInBytes)
-        {
-        }
-
-        @Override
-        public void onFailedSmallFrame(int messageCount, int payloadSizeInBytes)
-        {
-        }
-
-        @Override
-        public void onConnect(int messagingVersion, OutboundConnectionSettings settings)
-        {
-            if (acks.incrementAndGet() > 1)
-                fail.accept(new AssertionError("Handshake was acknowledged more than once"));
         }
     }
 }
