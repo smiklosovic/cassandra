@@ -193,6 +193,7 @@ public abstract class ModificationStatement implements CQLStatement.SingleKeyspa
         this.conditions = conditions;
         this.attrs = attrs;
         this.source = source;
+        this.isReadRequired = operations.requiresRead();
 
         if (!conditions.isEmpty())
         {
@@ -207,25 +208,40 @@ public abstract class ModificationStatement implements CQLStatement.SingleKeyspa
 
         RegularAndStaticColumns.Builder updatedColumnsBuilder = RegularAndStaticColumns.builder();
         RegularAndStaticColumns.Builder requiresReadBuilder = RegularAndStaticColumns.builder();
-        for (Operation operation : operations)
+
+        if (isReadRequired)
         {
-            updatedColumnsBuilder.add(operation.column);
-            // If the operation requires a read-before-write and we're doing a conditional read, we want to read
-            // the affected column as part of the read-for-conditions paxos phase (see #7499).
-            if (operation.requiresRead())
+            for (Operation operation : operations)
             {
-                conditionColumnsBuilder.add(operation.column);
-                requiresReadBuilder.add(operation.column);
+                updatedColumnsBuilder.add(operation.column);
+
+                // If the operation requires a read-before-write and we're doing a conditional read, we want to read
+                // the affected column as part of the read-for-conditions paxos phase (see #7499).
+                if (operation.requiresRead())
+                {
+                    conditionColumnsBuilder.add(operation.column);
+                    requiresReadBuilder.add(operation.column);
+                }
+            }
+
+            for (ReferenceOperation operation : operations.allSubstitutions())
+            {
+                ColumnMetadata receiver = operation.getReceiver();
+                updatedColumnsBuilder.add(receiver);
+
+                // If the operation requires a read-before-write, make sure its receiver is selected by the auto-read the
+                // transaction creates during update creation. (see createSelectForTxn())
+                if (operation.requiresRead())
+                    requiresReadBuilder.add(receiver);
             }
         }
-        for (ReferenceOperation operation : operations.allSubstitutions())
+        else
         {
-            ColumnMetadata receiver = operation.getReceiver();
-            updatedColumnsBuilder.add(receiver);
-            // If the operation requires a read-before-write, make sure its receiver is selected by the auto-read the
-            // transaction creates during update creation. (see createSelectForTxn())
-            if (operation.requiresRead())
-                requiresReadBuilder.add(receiver);
+            for (Operation operation : operations)
+                updatedColumnsBuilder.add(operation.column);
+
+            for (ReferenceOperation operation : operations.allSubstitutions())
+                updatedColumnsBuilder.add(operation.getReceiver());
         }
 
         RegularAndStaticColumns modifiedColumns = updatedColumnsBuilder.build();
@@ -264,7 +280,6 @@ public abstract class ModificationStatement implements CQLStatement.SingleKeyspa
         this.conditionColumns = conditionColumnsBuilder.build();
         this.requiresRead = requiresReadBuilder.build();
         this.functions = findAllFunctions();
-        this.isReadRequired = operations.requiresRead();
     }
 
     @Override
