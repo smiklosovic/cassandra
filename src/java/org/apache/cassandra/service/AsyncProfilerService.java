@@ -189,6 +189,9 @@ public class AsyncProfilerService implements AsyncProfilerMBean
                 @Override
                 public Object apply(AsyncProfiler profiler) throws Throwable
                 {
+                    maybeCreateProfilesLogDir();
+                    new StartupChecks.AsyncProfilerKernelParamsCheck().execute(null, true);
+
                     String parsedFormat = AsyncProfilerFormat.parseFormat(outputFormat);
                     String parsedEvents = AsyncProfilerEvent.parseEvents(events);
                     File file = new File(logDir, validateOutputFileName(outputFileName));
@@ -233,6 +236,7 @@ public class AsyncProfilerService implements AsyncProfilerMBean
                 @Override
                 public Object apply(AsyncProfiler profiler) throws Throwable
                 {
+                    maybeCreateProfilesLogDir();
                     File resolvedOutputFile;
                     String cmd = "stop";
                     if (outputFileName != null)
