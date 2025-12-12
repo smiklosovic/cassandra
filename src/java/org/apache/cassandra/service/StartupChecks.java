@@ -758,10 +758,15 @@ public class StartupChecks
         }
     };
 
-    public static final StartupCheck checkKernelParamsForAsyncProfiler = new StartupCheck()
+    public static final StartupCheck checkKernelParamsForAsyncProfiler = new AsyncProfilerKernelParamsCheck();
+
+    public static class AsyncProfilerKernelParamsCheck implements StartupCheck
     {
-        @Override
-        public void execute(StartupChecksOptions startupChecksOptions)
+        private static final String MESSAGE = "Async-profiler experience likely affected. Kernel symbols are unavailable due to restrictions. " +
+                                              "Try 'sysctl kernel.perf_event_paranoid=1' and 'sysctl kernel.kptr_restrict=0' or its " +
+                                              "variation on your system to resolve the issue.";
+
+        public void execute(StartupChecksOptions startupChecksOptions, boolean shouldThrow)
         {
             try
             {
@@ -784,19 +789,27 @@ public class StartupChecks
                                  "'kernel.perf_event_paranoid' and 'kernel.kptr_restrict' for Async-profiler. " +
                                  "Its usability might be limited.");
                 }
-                else if (perfEventParanoid != 1 || kptrRestrict != 0)
+                else if (perfEventParanoid > 1 || kptrRestrict != 0)
                 {
-                        logger.warn("Async-profiler experience likely affected. Kernel symbols are unavailable due to restrictions. " +
-                                    "Try 'sysctl kernel.perf_event_paranoid=1' and 'sysctl kernel.kptr_restrict=0' or its " +
-                                    "variation on your system to resolve the issue.");
+                    if (shouldThrow)
+                        throw new IllegalStateException(MESSAGE);
+                    else
+                        logger.warn(MESSAGE);
                 }
             }
             catch (Throwable t)
             {
-                // ignore, these are reported on best-effort basis
+                if (shouldThrow)
+                    throw t;
             }
         }
-    };
+
+        @Override
+        public void execute(StartupChecksOptions startupChecksOptions)
+        {
+            execute(startupChecksOptions, false);
+        }
+    }
 
     @VisibleForTesting
     public static Path getReadAheadKBPath(String blockDirectoryPath)
