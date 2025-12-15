@@ -24,6 +24,7 @@ import java.nio.file.NoSuchFileException;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 import org.apache.cassandra.io.util.File;
@@ -40,6 +41,11 @@ import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
 import static java.nio.file.StandardOpenOption.WRITE;
 import static java.util.stream.Collectors.joining;
+import static org.apache.cassandra.service.AsyncProfilerService.ASYNC_PROFILER_START_DURATION_PARAM;
+import static org.apache.cassandra.service.AsyncProfilerService.ASYNC_PROFILER_START_EVENTS_PARAM;
+import static org.apache.cassandra.service.AsyncProfilerService.ASYNC_PROFILER_START_OUTPUT_FILE_NAME_PARAM;
+import static org.apache.cassandra.service.AsyncProfilerService.ASYNC_PROFILER_START_OUTPUT_FORMAT_PARAM;
+import static org.apache.cassandra.service.AsyncProfilerService.ASYNC_PROFILER_STOP_OUTPUT_FILE_NAME_PARAM;
 import static org.apache.cassandra.service.AsyncProfilerService.parseDuration;
 import static org.apache.cassandra.service.AsyncProfilerService.validateCommand;
 import static org.apache.cassandra.service.AsyncProfilerService.validateOutputFileName;
@@ -126,10 +132,11 @@ public class AsyncProfileCommandGroup extends AbstractCommand
                 filename = AsyncProfileCommandGroup.getOutputFileName(outputFormat);
 
             doWithProfiler(probe, profiler -> {
-                if (!profiler.start(event.stream().map(Enum::name).collect(joining(",")),
-                                    outputFormat.name(),
-                                    duration,
-                                    validateOutputFileName(filename)))
+                Map<String, String> startParameters = Map.of(ASYNC_PROFILER_START_EVENTS_PARAM, event.stream().map(Enum::name).collect(joining(",")),
+                                                             ASYNC_PROFILER_START_OUTPUT_FORMAT_PARAM, outputFormat.name(),
+                                                             ASYNC_PROFILER_START_DURATION_PARAM, duration,
+                                                             ASYNC_PROFILER_START_OUTPUT_FILE_NAME_PARAM, filename);
+                if (!profiler.start(startParameters))
                 {
                     output.err.println("Profiler has already started or there was a failure to start it.");
                     System.exit(1);
@@ -150,7 +157,8 @@ public class AsyncProfileCommandGroup extends AbstractCommand
         {
             doWithProfiler(probe, profiler -> {
                 String file = filename != null ? validateOutputFileName(filename) : null;
-                if (!profiler.stop(file))
+                Map<String, String> stopParameters = Map.of(ASYNC_PROFILER_STOP_OUTPUT_FILE_NAME_PARAM, file);
+                if (!profiler.stop(stopParameters))
                 {
                     output.err.println("Profiler has already stopped or there was a failure to stop it.");
                     System.exit(1);

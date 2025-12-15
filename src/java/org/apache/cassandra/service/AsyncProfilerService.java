@@ -26,6 +26,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import javax.management.StandardMBean;
@@ -58,6 +60,18 @@ public class AsyncProfilerService implements AsyncProfilerMBean
     private static final Pattern VALID_FILENAME_REGEX_PATTERN = Pattern.compile("^[a-zA-Z0-9-]*\\.?[a-zA-Z0-9-]*$");
     private static final int MAX_SAFE_PROFILING_DURATION = 43200; // 12 hours
     private static final String ASYNC_PROFILER_LOG_DIR = Path.of(LOG_DIR.getString(), "profiler").toAbsolutePath().toString();
+
+    public static final String ASYNC_PROFILER_START_EVENTS_PARAM = "events";
+    public static final String ASYNC_PROFILER_START_OUTPUT_FORMAT_PARAM = "outputFormat";
+    public static final String ASYNC_PROFILER_START_DURATION_PARAM = "duration";
+    public static final String ASYNC_PROFILER_START_OUTPUT_FILE_NAME_PARAM = "outputFileName";
+    public static final Set<String> ASYNC_PROFILER_START_PARAMS = Set.of(ASYNC_PROFILER_START_EVENTS_PARAM,
+                                                                          ASYNC_PROFILER_START_OUTPUT_FORMAT_PARAM,
+                                                                          ASYNC_PROFILER_START_DURATION_PARAM,
+                                                                          ASYNC_PROFILER_START_OUTPUT_FILE_NAME_PARAM);
+
+    public static final String ASYNC_PROFILER_STOP_OUTPUT_FILE_NAME_PARAM = "outputFileName";
+    public static final Set<String> ASYNC_PROFILER_STOP_PARAMS = Set.of(ASYNC_PROFILER_STOP_OUTPUT_FILE_NAME_PARAM);
 
     private static AsyncProfilerService instance;
     private static AsyncProfiler asyncProfiler;
@@ -177,10 +191,12 @@ public class AsyncProfilerService implements AsyncProfilerMBean
     }
 
     @Override
-    public synchronized boolean start(String events, String outputFormat, String duration, String outputFileName)
+    public synchronized boolean start(Map<String, String> parameters)
     {
         if (isRunning())
             return false;
+
+        validateStartParameters(parameters);
 
         try
         {
@@ -192,14 +208,14 @@ public class AsyncProfilerService implements AsyncProfilerMBean
                     maybeCreateProfilesLogDir();
                     new StartupChecks.AsyncProfilerKernelParamsCheck().execute(null, true);
 
-                    String parsedFormat = AsyncProfilerFormat.parseFormat(outputFormat);
-                    String parsedEvents = AsyncProfilerEvent.parseEvents(events);
-                    File file = new File(logDir, validateOutputFileName(outputFileName));
+                    String parsedFormat = AsyncProfilerFormat.parseFormat(parameters.get(ASYNC_PROFILER_START_OUTPUT_FORMAT_PARAM));
+                    String parsedEvents = AsyncProfilerEvent.parseEvents(parameters.get(ASYNC_PROFILER_START_EVENTS_PARAM));
+                    File file = new File(logDir, validateOutputFileName(parameters.get(ASYNC_PROFILER_START_OUTPUT_FILE_NAME_PARAM)));
 
                     String cmd = format("start,%s,event=%s,timeout=%s,file=%s",
                                         parsedFormat,
                                         parsedEvents,
-                                        parseDuration(duration),
+                                        parseDuration(parameters.get(ASYNC_PROFILER_START_DURATION_PARAM)),
                                         file);
 
                     currentResultFile.set(file);
@@ -223,11 +239,22 @@ public class AsyncProfilerService implements AsyncProfilerMBean
         }
     }
 
+    private void validateStartParameters(Map<String, String> parameters)
+    {
+        if (!ASYNC_PROFILER_START_PARAMS.equals(parameters.keySet()))
+        {
+            throw new IllegalArgumentException("Wrong parameters passed to start async profiler method. Passed parameters" +
+                                               " should be: " + ASYNC_PROFILER_START_PARAMS);
+        }
+    }
+
     @Override
-    public synchronized boolean stop(String outputFileName)
+    public synchronized boolean stop(Map<String, String> parameters)
     {
         if (!isRunning())
             return false;
+
+        validateStopParameters(parameters);
 
         try
         {
@@ -239,6 +266,7 @@ public class AsyncProfilerService implements AsyncProfilerMBean
                     maybeCreateProfilesLogDir();
                     File resolvedOutputFile;
                     String cmd = "stop";
+                    String outputFileName = parameters.get(ASYNC_PROFILER_STOP_OUTPUT_FILE_NAME_PARAM);
                     if (outputFileName != null)
                         resolvedOutputFile = new File(logDir, validateOutputFileName(outputFileName));
                     else
@@ -265,6 +293,12 @@ public class AsyncProfilerService implements AsyncProfilerMBean
             logger.error("Failed to stop Async-Profiler", e);
             return false;
         }
+    }
+
+    private void validateStopParameters(Map<String, String> parameters)
+    {
+        // With current implementation, the only parameter for output filename is optional. There is nothing else to
+        // validate. This method exists here for completion and to keep the same pattern that we have on the start method.
     }
 
     @Override

@@ -20,9 +20,7 @@ package org.apache.cassandra.profiler;
 
 import java.io.IOException;
 import java.util.List;
-
-import org.apache.cassandra.service.AsyncProfilerService.AsyncProfilerEvent;
-import org.apache.cassandra.service.AsyncProfilerService.AsyncProfilerFormat;
+import java.util.Map;
 
 public interface AsyncProfilerMBean
 {
@@ -31,23 +29,18 @@ public interface AsyncProfilerMBean
     /**
      * Starts profiling.
      *
-     * @param events         events, can be joined by a comma, each event has to be one of enum names of
-     *                       {@link AsyncProfilerEvent}
-     * @param outputFormat   output format, has to be one of enum names of {@link AsyncProfilerFormat}
-     * @param duration       duration of the profiling, Accepts string values in the
-     *                       form of {@code '5m'}, {@code '30s'} etc.
-     * @param outputFileName file name to save results to
+     * @param parameters     Parameters for start command
      * @return true if profiling has started, false when not (e.g. when it was started already)
      */
-    boolean start(String events, String outputFormat, String duration, String outputFileName);
+    boolean start(Map<String, String> parameters);
 
     /**
      * Stops profiling.
      *
-     * @param outputFileName file name to save results to
+     * @param parameters     Parameters for stop command
      * @return true if profiling was stopped
      */
-    boolean stop(String outputFileName);
+    boolean stop(Map<String, String> parameters);
 
     /**
      * Executes a command.
