@@ -30,13 +30,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+
 import javax.management.StandardMBean;
 
 import com.google.common.annotations.VisibleForTesting;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import one.profiler.AsyncProfiler;
 import org.apache.cassandra.config.CassandraRelevantProperties;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.DurationSpec;
@@ -44,6 +45,8 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.profiler.AsyncProfilerMBean;
 import org.apache.cassandra.utils.MBeanWrapper;
+
+import one.profiler.AsyncProfiler;
 
 import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
@@ -66,9 +69,9 @@ public class AsyncProfilerService implements AsyncProfilerMBean
     public static final String ASYNC_PROFILER_START_DURATION_PARAM = "duration";
     public static final String ASYNC_PROFILER_START_OUTPUT_FILE_NAME_PARAM = "outputFileName";
     public static final Set<String> ASYNC_PROFILER_START_PARAMS = Set.of(ASYNC_PROFILER_START_EVENTS_PARAM,
-                                                                          ASYNC_PROFILER_START_OUTPUT_FORMAT_PARAM,
-                                                                          ASYNC_PROFILER_START_DURATION_PARAM,
-                                                                          ASYNC_PROFILER_START_OUTPUT_FILE_NAME_PARAM);
+                                                                         ASYNC_PROFILER_START_OUTPUT_FORMAT_PARAM,
+                                                                         ASYNC_PROFILER_START_DURATION_PARAM,
+                                                                         ASYNC_PROFILER_START_OUTPUT_FILE_NAME_PARAM);
 
     public static final String ASYNC_PROFILER_STOP_OUTPUT_FILE_NAME_PARAM = "outputFileName";
     public static final Set<String> ASYNC_PROFILER_STOP_PARAMS = Set.of(ASYNC_PROFILER_STOP_OUTPUT_FILE_NAME_PARAM);
