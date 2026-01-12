@@ -22,10 +22,13 @@ import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.UUID;
 
+import org.junit.Assume;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import org.apache.cassandra.config.CassandraRelevantProperties;
 import org.apache.cassandra.distributed.Cluster;
 import org.apache.cassandra.distributed.api.Feature;
 import org.apache.cassandra.distributed.api.NodeToolResult;
@@ -34,7 +37,7 @@ import org.apache.cassandra.distributed.shared.WithProperties;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.service.AsyncProfilerService;
-import org.apache.cassandra.service.StartupChecks;
+import org.apache.cassandra.service.StartupChecks.AsyncProfilerKernelParamsCheck;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.cassandra.config.CassandraRelevantProperties.ASYNC_PROFILER_ENABLED;
@@ -48,27 +51,26 @@ public class AsyncProfilerTest extends TestBaseImpl
 
     private Cluster cluster;
 
-    /**
-     * Test-friendly kernel params check that returns valid values without reading from /proc
-     */
-    public static class TestAsyncProfilerKernelParamsCheck extends StartupChecks.AsyncProfilerKernelParamsCheck
+    @BeforeClass
+    public static void beforeAllTests()
     {
-        @Override
-        protected int readPerfEventParanoid()
-        {
-            return 1; // Valid value (must be <= 1)
-        }
+        CassandraRelevantProperties.TEST_SKIP_KERNEL_STARTUP_CHECK.setBoolean(false);
+    }
 
-        @Override
-        protected int readKptrRestrict()
-        {
-            return 0; // Valid value (must be == 0)
-        }
+    private boolean hasCorrectKernelParams()
+    {
+        AsyncProfilerKernelParamsCheck check = new AsyncProfilerKernelParamsCheck();
+        int perfEventParanoid = check.readPerfEventParanoid();
+        int kptrRestrict = check.readKptrRestrict();
+
+        return perfEventParanoid <= 1 && kptrRestrict == 0;
     }
 
     @Test
     public void testNodetoolCommands() throws Throwable
     {
+        Assume.assumeTrue(hasCorrectKernelParams());
+
         File newTmpDir = new File(tmpDir.newFolder());
 
         try (WithProperties withProperties = new WithProperties()
@@ -127,7 +129,7 @@ public class AsyncProfilerTest extends TestBaseImpl
             // Initialize AsyncProfilerService instance in the cluster node context with the test directory
             String tmpDirPath = newTmpDir.absolutePath();
             cluster.get(1).runOnInstance(() -> {
-                AsyncProfilerService.instance(tmpDirPath, true, new TestAsyncProfilerKernelParamsCheck());
+                AsyncProfilerService.instance(tmpDirPath, true);
             });
 
             // fetch

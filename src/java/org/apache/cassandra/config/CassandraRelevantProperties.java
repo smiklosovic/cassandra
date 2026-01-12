@@ -645,6 +645,7 @@ public enum CassandraRelevantProperties
     TEST_SIMULATOR_PRINT_ASM_OPTS("cassandra.test.simulator.print_asm_opts", ""),
     TEST_SIMULATOR_PRINT_ASM_TYPES("cassandra.test.simulator.print_asm_types", ""),
     TEST_SKIP_CRYPTO_PROVIDER_INSTALLATION("cassandra.test.security.skip.provider.installation", "false"),
+    TEST_SKIP_KERNEL_STARTUP_CHECK("cassandra.test_skip_kernel_startup_check", "false"),
     TEST_SSTABLE_FORMAT_DEVELOPMENT("cassandra.test.sstableformatdevelopment"),
     /**
      * {@link StorageCompatibilityMode} mode sets how the node will behave, sstable or messaging versions to use etc according to a yaml setting.

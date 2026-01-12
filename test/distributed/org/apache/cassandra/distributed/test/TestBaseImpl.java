@@ -187,6 +187,7 @@ public class TestBaseImpl extends DistributedTestBase
     public static void beforeClass() throws Throwable
     {
         CassandraRelevantProperties.SIMULATOR_STARTED.setString(Long.toString(MILLISECONDS.toSeconds(currentTimeMillis())));
+        CassandraRelevantProperties.TEST_SKIP_KERNEL_STARTUP_CHECK.setBoolean(true);
         ICluster.setup();
         SKIP_GC_INSPECTOR.setBoolean(true);
         AccordCache.validateLoadOnEvict(true);

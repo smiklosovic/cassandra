@@ -62,13 +62,13 @@ public class AsyncProfilerServiceTest
     private static class TestAsyncProfilerKernelParamsCheck extends StartupChecks.AsyncProfilerKernelParamsCheck
     {
         @Override
-        protected int readPerfEventParanoid()
+        public int readPerfEventParanoid()
         {
             return 1; // Valid value (must be <= 1)
         }
 
         @Override
-        protected int readKptrRestrict()
+        public int readKptrRestrict()
         {
             return 0; // Valid value (must be == 0)
         }
