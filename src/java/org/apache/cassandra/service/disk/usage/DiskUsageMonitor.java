@@ -147,7 +147,7 @@ public class DiskUsageMonitor
             usable = usable.add(BigInteger.valueOf(usableSpace(e.getKey())));
 
             for (Directories.DataDirectory dir : e.getValue())
-                used = used.add(BigInteger.valueOf(dir.getRawSize()));
+                used = used.add(BigInteger.valueOf(dir.getTrueSize()));
         }
 
         // The total disk size for data directories is the space that is actually used by those directories plus the

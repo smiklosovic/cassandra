@@ -425,36 +425,72 @@ public final class FileUtils
      */
     public static long folderSize(File folder)
     {
+        return folderSizeInternal(folder, false);
+    }
+
+    /**
+     * Get the size of a directory in bytes without including any snapshots
+     * @param folder The directory for which we need size.
+     * @return The size of the directory without snapshots
+     */
+    public static long folderSizeWithoutSnapshots(File folder)
+    {
+        return folderSizeInternal(folder, true);
+    }
+
+    private static long folderSizeInternal(File folder, boolean skipSnapshots)
+    {
         if (!folder.exists())
             return 0;
 
-        final long [] sizeArr = {0L};
+        FolderWalker folderWalker = new FolderWalker(skipSnapshots);
+
         try
         {
-            Files.walkFileTree(folder.toPath(), new SimpleFileVisitor<Path>()
-            {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
-                {
-                    sizeArr[0] += attrs.size();
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFileFailed(Path path, IOException e) throws IOException
-                {
-                    if (e instanceof NoSuchFileException)
-                        return FileVisitResult.CONTINUE;
-                    else
-                        throw e;
-                }
-            });
+            Files.walkFileTree(folder.toPath(), folderWalker);
         }
         catch (IOException e)
         {
             logger.error("Error while getting {} folder size. {}", folder, e.getMessage());
         }
-        return sizeArr[0];
+
+        return folderWalker.sizeArr[0];
+    }
+
+    private static class FolderWalker extends SimpleFileVisitor<Path>
+    {
+        private final boolean skipSnapshots;
+        final long [] sizeArr = {0L};
+
+        private FolderWalker(boolean skipSnapshots)
+        {
+            this.skipSnapshots = skipSnapshots;
+        }
+
+        @Override
+        public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
+        {
+            if (skipSnapshots && "snapshots".equals(dir.getFileName().toString()))
+                return FileVisitResult.SKIP_SUBTREE;
+            else
+                return FileVisitResult.CONTINUE;
+        }
+
+        @Override
+        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
+        {
+            sizeArr[0] += attrs.size();
+            return FileVisitResult.CONTINUE;
+        }
+
+        @Override
+        public FileVisitResult visitFileFailed(Path path, IOException e) throws IOException
+        {
+            if (e instanceof NoSuchFileException)
+                return FileVisitResult.CONTINUE;
+            else
+                throw e;
+        }
     }
 
     public static void append(File file, String ... lines)

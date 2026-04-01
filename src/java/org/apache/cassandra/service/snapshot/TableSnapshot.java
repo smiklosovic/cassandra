@@ -238,14 +238,56 @@ public class TableSnapshot
         if (cfs == null)
             return 0;
 
-        return computeTrueSizeBytes(cfs.getFilesOfCfs());
+        return computeTrueSizeBytes(cfs.getFilesOfCfs(), getDirectories());
+    }
+
+
+    /**
+     * {@code location} comes from {@link Directories.DataDirectory}. It is a logical
+     * location where all Cassandra data are. There is in practice one data directory per disk.
+     *
+     * @param location data location we want to get the size of snapshot for
+     * @return true size of a snapshot for a particular data directory.
+     */
+    public long computeTrueSizeBytes(File location)
+    {
+        File dirOfInterest = null;
+
+        for (File dir : snapshotDirs)
+        {
+            if (dir.toPath().startsWith(location.toPath()))
+            {
+                dirOfInterest = dir;
+                break;
+            }
+        }
+
+        if (dirOfInterest == null)
+            return 0;
+
+        Set<String> filesOfCfs;
+        ColumnFamilyStore cfs = ColumnFamilyStore.getIfExists(keyspaceName, tableName);
+        if (cfs == null)
+            return 0;
+        else
+            filesOfCfs = cfs.getFilesOfCfs();
+
+        if (filesOfCfs == null || filesOfCfs.isEmpty())
+            return 0;
+
+        return computeTrueSizeBytes(filesOfCfs, Set.of(dirOfInterest));
     }
 
     public long computeTrueSizeBytes(Set<String> files)
     {
+        return computeTrueSizeBytes(files, getDirectories());
+    }
+
+    private long computeTrueSizeBytes(Set<String> files, Collection<File> dataPaths)
+    {
         long size = manifestsSize + schemasSize;
 
-        for (File dataPath : getDirectories())
+        for (File dataPath : dataPaths)
         {
             List<Path> snapshotFiles = listDir(dataPath.toPath());
             for (Path snapshotFile : snapshotFiles)

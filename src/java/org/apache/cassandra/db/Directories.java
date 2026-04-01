@@ -71,7 +71,9 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.PathUtils;
 import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.service.snapshot.SnapshotManager;
 import org.apache.cassandra.service.snapshot.SnapshotManifest;
+import org.apache.cassandra.service.snapshot.TableSnapshot;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.Pair;
 
@@ -824,6 +826,26 @@ public class Directories
         {
             return FileUtils.folderSize(location);
         }
+
+        /**
+         * True size of data directory equals to sizes without snapshots plus
+         * their true disk size. A snapshot can contain hardlinks, it is needed
+         * to treat these spefically in order to not include file sizes of hardlinked files.
+         *
+         * @return true size of this data directory
+         */
+        public long getTrueSize()
+        {
+            long trueSize = FileUtils.folderSizeWithoutSnapshots(location);
+
+            // For this data dir location, go over snapshots and get their true sizes only for that location.
+            // A snapshot might be in general spread over multiple data dirs / locations,
+            // here we are interested only in a specific one, so we need to reflect that
+            for (TableSnapshot s : SnapshotManager.instance.getSnapshots(p -> true))
+                trueSize += s.computeTrueSizeBytes(location);
+
+            return trueSize;
+        };
 
         @Override
         public boolean equals(Object o)
