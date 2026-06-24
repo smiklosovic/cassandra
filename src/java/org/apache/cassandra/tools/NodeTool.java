@@ -40,6 +40,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileWriter;
 import org.apache.cassandra.tools.nodetool.JmxConnect;
+import org.apache.cassandra.tools.nodetool.LocalCommand;
 import org.apache.cassandra.tools.nodetool.NodetoolCommand;
 import org.apache.cassandra.tools.nodetool.layout.CassandraCliHelpLayout;
 import org.apache.cassandra.utils.FBUtilities;
@@ -129,7 +130,11 @@ public class NodeTool
                        // -Dkey=value will not.
                        .setPosixClusteredShortOptionsAllowed(false);
 
-            printHistory(args);
+            if ((commandLine.getCommandSpec().userObject() instanceof LocalCommand))
+                printHistory(removeJMXPort(args));
+            else
+                printHistory(args);
+
             return commandLine.execute(relocatePrintPortOptionsForBackwardCompatibility(args));
         }
         catch (ConfigurationException e)
@@ -142,6 +147,23 @@ public class NodeTool
             err(Throwables.getRootCause(e));
             return 2;
         }
+    }
+
+    private String[] removeJMXPort(String[] args)
+    {
+        if (args.length < 2)
+            return args;
+
+        List<String> argsWithoutJMXPort = new ArrayList<>();
+        for (int i = 0; i < args.length; i++)
+        {
+            if ("-p".equals(args[i]))
+                ++i; // skip the port itself which is the argument of -p
+            else
+                argsWithoutJMXPort.add(args[i]);
+        }
+
+        return argsWithoutJMXPort.toArray(new String[0]);
     }
 
     private static void printHistory(String... args)
