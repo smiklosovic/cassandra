@@ -421,6 +421,9 @@ public abstract class CBUtil
         int length = cb.readInt();
         if (length < 0)
             return null;
+        if (length > cb.readableBytes())
+            throw new ProtocolException(String.format("Cannot read value of length %d, only %d bytes remaining in the message",
+                                                      length, cb.readableBytes()));
 
         return ByteBuffer.wrap(readRawBytes(cb, length));
     }
@@ -608,6 +611,10 @@ public abstract class CBUtil
 
     private static byte[] readRawBytes(ByteBuf cb, int length)
     {
+        if (length > cb.readableBytes())
+            throw new ProtocolException(String.format("Cannot read value of length %d, only %d bytes remaining in the message",
+                                                      length, cb.readableBytes()));
+
         byte[] bytes = new byte[length];
         cb.readBytes(bytes);
         return bytes;
