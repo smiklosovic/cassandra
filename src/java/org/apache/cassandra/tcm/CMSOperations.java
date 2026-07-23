@@ -186,15 +186,11 @@ public class CMSOperations implements CMSOperationsMBean
         ClusterMetadata metadata = ClusterMetadata.current();
         int minCmsSize = Guardrails.instance.getMinimumCmsSizeFailThreshold();
         int totalNodes = metadata.directory.allJoinedEndpoints().size();
-        // Skip clusters smaller than the threshold: they cannot host that many replicas yet (e.g. during bootstrap).
-        // When the guardrail is disabled this is never true, and guard() below is then a no-op.
-        if (totalNodes < minCmsSize)
-            return;
-
         int cmsSize = params.options.values().stream()
                                     .mapToInt(Integer::parseInt)
                                     .sum();
-        Guardrails.minimumCmsSize.guard(cmsSize, "CMS", false, null);
+
+        Guardrails.minimumCmsSize.guard(minCmsSize, totalNodes, cmsSize);
     }
 
     @Override

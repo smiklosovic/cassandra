@@ -615,20 +615,11 @@ public final class Guardrails implements GuardrailsMBean
                      format("The keyspace %s has a replication factor of %s, below the %s threshold of %s.",
                             what, value, isWarning ? "warning" : "failure", threshold));
 
+
     /**
      * Guardrail on the minimum CMS size (aggregate replication factor across DCs).
      */
-    public static final MinThreshold minimumCmsSize =
-    (MinThreshold) new MinThreshold("minimum_cms_size",
-                     null,
-                     state -> -1,
-                     state -> CONFIG_PROVIDER.getOrCreate(state).getMinimumCmsSizeFailThreshold(),
-                     (isWarning, what, value, threshold) ->
-                     format("The CMS size of %s is below the failure threshold of %s. " +
-                            "Reconfigure CMS so its total size (sum of replication factors across all datacenters) is at least %s.",
-                            value, threshold, threshold))
-                     // CMS reconfiguration is a system operation with no ClientState; make it abort rather than just log.
-                     .throwOnNullClientState(true);
+    public static final CMSSizeGuardrail minimumCmsSize = new CMSSizeGuardrail(state -> CONFIG_PROVIDER.getOrCreate(state).getMinimumCmsSizeFailThreshold());
 
     /**
      * Guardrail on the maximum replication factor.
