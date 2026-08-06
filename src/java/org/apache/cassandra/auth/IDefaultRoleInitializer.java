@@ -18,17 +18,10 @@
 
 package org.apache.cassandra.auth;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.Set;
 
-import org.apache.cassandra.cql3.QueryProcessor;
-import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
-import org.apache.cassandra.schema.SchemaConstants;
-import org.apache.cassandra.tcm.ClusterMetadata;
-
-import static org.apache.cassandra.auth.CassandraRoleManager.escape;
 
 /**
  * Creates the initial role on a cluster which has no roles yet, so that there is some
@@ -43,8 +36,6 @@ import static org.apache.cassandra.auth.CassandraRoleManager.escape;
  */
 public interface IDefaultRoleInitializer
 {
-    Logger logger = LoggerFactory.getLogger(IDefaultRoleInitializer.class);
-
     /**
      * Creates the default role.
      * When using this in connection with CassandraRoleManager, every node runs this independently during initial
@@ -64,6 +55,9 @@ public interface IDefaultRoleInitializer
      */
     String defaultRoleName();
 
+
+    Set<String> supportedParams();
+
     /**
      * Validates configuration of the IDefaultRoleInitializer implementation (if configurable).
      * <p>
@@ -73,41 +67,17 @@ public interface IDefaultRoleInitializer
      *
      * @throws ConfigurationException when there is a configuration error.
      */
-    default void validateConfiguration() throws ConfigurationException
-    {
-    }
+    void validateConfiguration() throws ConfigurationException;
 
-    /*
-     * Create the default superuser role to bootstrap role creation on a clean system. Preemptively
-     * gives the role the default password so PasswordAuthenticator can be used to log in (if
-     * configured)
+    /**
+     * Create the default superuser role to bootstrap role creation on a clean system.
      */
-    default void setupDefaultRole()
-    {
-        if (ClusterMetadata.current().tokenMap.tokens().isEmpty())
-            throw new IllegalStateException("CassandraRoleManager skipped default role setup: no known tokens in ring");
+    void setupDefaultRole();
 
-        try
-        {
-            if (!hasExistingRoles())
-            {
-                createDefaultRole();
-            }
-        }
-        catch (RequestExecutionException e)
-        {
-            logger.warn("CassandraRoleManager skipped default role setup: some nodes were not ready");
-            throw e;
-        }
-    }
-
-    default boolean hasExistingRoles()
-    {
-        // Try looking up the configured default role first, to avoid the range query if possible.
-        String defaultRoleQuery = String.format("SELECT * FROM %s.%s WHERE role = '%s'", SchemaConstants.AUTH_KEYSPACE_NAME, AuthKeyspace.ROLES, escape(defaultRoleName()));
-        String allUsersQuery = String.format("SELECT * FROM %s.%s LIMIT 1", SchemaConstants.AUTH_KEYSPACE_NAME, AuthKeyspace.ROLES);
-        return !QueryProcessor.process(defaultRoleQuery, ConsistencyLevel.ONE).isEmpty()
-               || !QueryProcessor.process(defaultRoleQuery, ConsistencyLevel.QUORUM).isEmpty()
-               || !QueryProcessor.process(allUsersQuery, ConsistencyLevel.QUORUM).isEmpty();
-    }
+    /**
+     * Checks for the existence of roles, so it does not need to set up default roles.
+     *
+     * @return true if roles do exist, false otherwise.
+     */
+    boolean hasExistingRoles();
 }

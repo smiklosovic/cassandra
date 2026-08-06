@@ -32,8 +32,8 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.schema.SchemaConstants;
 
 import static org.apache.cassandra.auth.CassandraRoleManager.consistencyForRoleWrite;
-import static org.apache.cassandra.auth.CassandraRoleManager.escape;
-import static org.apache.cassandra.auth.CassandraRoleManager.hashpw;
+import static org.apache.cassandra.auth.AuthUtils.escape;
+import static org.apache.cassandra.auth.AuthUtils.hashpw;
 
 /**
  * Creates the default role with a password, so that it can be authenticated with
@@ -46,7 +46,7 @@ import static org.apache.cassandra.auth.CassandraRoleManager.hashpw;
  * {@link MutualTlsDefaultRoleInitializer}. Deployments which do use this initializer should rotate or drop the
  * created role before the native transport is reachable.
  */
-public class PasswordDefaultRoleInitializer implements IDefaultRoleInitializer
+public class PasswordDefaultRoleInitializer extends AbstractDefaultRoleInitializer
 {
     private static final Logger logger = LoggerFactory.getLogger(PasswordDefaultRoleInitializer.class);
 
@@ -74,17 +74,19 @@ public class PasswordDefaultRoleInitializer implements IDefaultRoleInitializer
 
     public PasswordDefaultRoleInitializer(Map<String, String> parameters)
     {
-        for (String param : parameters.keySet())
-        {
-            if (!SUPPORTED_PARAMS.contains(param))
-                throw new ConfigurationException(String.format("Unsupported parameter '%s' for %s, supported parameters are %s", param, getClass().getSimpleName(), SUPPORTED_PARAMS));
-        }
+        super(parameters);
 
         role = parameters.getOrDefault(ROLE, DEFAULT_SUPERUSER_NAME);
         passwordHash = parameters.get(PASSWORD_HASH);
         password = passwordHash == null
                    ? parameters.getOrDefault(PASSWORD, DEFAULT_SUPERUSER_PASSWORD)
                    : null;
+    }
+
+    @Override
+    public Set<String> supportedParams()
+    {
+        return SUPPORTED_PARAMS;
     }
 
     @Override

@@ -45,8 +45,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 
-import org.apache.commons.lang3.StringUtils;
-import org.mindrot.jbcrypt.BCrypt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,6 +83,8 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MBeanWrapper;
 import org.apache.cassandra.utils.NoSpamLogger;
 
+import static org.apache.cassandra.auth.AuthUtils.escape;
+import static org.apache.cassandra.auth.AuthUtils.hashpw;
 import static org.apache.cassandra.service.QueryState.forInternalCalls;
 import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 
@@ -739,16 +739,6 @@ public class CassandraRoleManager implements IRoleManager, CassandraRoleManagerM
         String failure = String.format("Password for role %s can only be changed every %sms.", roleName, PASSWORD_UPDATE_MIN_INTERVAL_MS);
         logger.warn(String.format("%s [performer: %s]", failure, performer.getName()));
         throw new OverloadedException(failure);
-    }
-
-    static String hashpw(String password)
-    {
-        return BCrypt.hashpw(password, PasswordSaltSupplier.get());
-    }
-
-    static String escape(String name)
-    {
-        return StringUtils.replace(name, "'", "''");
     }
 
     private static ByteBuffer byteBuf(String str)

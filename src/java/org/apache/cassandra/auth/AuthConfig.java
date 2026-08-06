@@ -154,7 +154,7 @@ public final class AuthConfig
         DatabaseDescriptor.getInternodeAuthenticator().validateConfiguration();
     }
 
-    public static <T> T authInstantiate(ParameterizedClass authCls, Class<T> expectedType, Class<? extends T> defaultCls)
+    private static <T> T authInstantiate(ParameterizedClass authCls, Class<T> expectedType, Class<? extends T> defaultCls)
     {
         if (authCls != null && authCls.class_name != null)
         {
