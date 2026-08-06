@@ -58,6 +58,12 @@ public class MutualTlsDefaultRoleInitializer extends AbstractDefaultRoleInitiali
     }
 
     @Override
+    public boolean supportsRoleManager(IRoleManager manager)
+    {
+        return manager instanceof CassandraRoleManager;
+    }
+
+    @Override
     public void createDefaultRole()
     {
         QueryProcessor.process(String.format("INSERT INTO %s.%s (role, is_superuser, can_login) " +

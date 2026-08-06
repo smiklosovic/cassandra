@@ -55,7 +55,11 @@ public interface IDefaultRoleInitializer
      */
     String defaultRoleName();
 
-
+    /**
+     * Returns set of parameters this initialzer supports.
+     *
+     * @return supported parameters.
+     */
     Set<String> supportedParams();
 
     /**
@@ -80,4 +84,10 @@ public interface IDefaultRoleInitializer
      * @return true if roles do exist, false otherwise.
      */
     boolean hasExistingRoles();
+
+    /**
+     * @param manager manager to check the support of
+     * @return true if this role initializer conceptually works together with specified role manager, false otherwise
+     */
+    boolean supportsRoleManager(IRoleManager manager);
 }

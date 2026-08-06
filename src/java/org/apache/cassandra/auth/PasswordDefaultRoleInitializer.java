@@ -90,6 +90,12 @@ public class PasswordDefaultRoleInitializer extends AbstractDefaultRoleInitializ
     }
 
     @Override
+    public boolean supportsRoleManager(IRoleManager manager)
+    {
+        return manager instanceof CassandraRoleManager;
+    }
+
+    @Override
     public void createDefaultRole()
     {
         QueryProcessor.process(createDefaultRoleQuery(), consistencyForRoleWrite(role));
