@@ -238,6 +238,12 @@ public class PaxosUncommittedIndex implements Index, PaxosUncommittedTracker.Upd
         return indexer;
     }
 
+    @Override
+    public boolean notifyIndexerAboutRowsInFullyExpiredSSTables()
+    {
+        return false;
+    }
+
     public BiFunction<PartitionIterator, ReadCommand, PartitionIterator> postProcessorFor(ReadCommand command)
     {
         return null;
