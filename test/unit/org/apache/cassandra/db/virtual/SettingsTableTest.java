@@ -46,6 +46,7 @@ import org.apache.cassandra.config.EncryptionOptions.ServerEncryptionOptions.Int
 import org.apache.cassandra.config.JMXServerOptions;
 import org.apache.cassandra.config.ParameterizedClass;
 import org.apache.cassandra.config.Redacted;
+import org.apache.cassandra.config.SubnetGroups;
 import org.apache.cassandra.config.TransparentDataEncryptionOptions;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.distributed.shared.WithProperties;
@@ -415,5 +416,12 @@ public class SettingsTableTest extends CQLTester
             check("json_false.settings", "data_file_directories", "[/my/data/directory, /another/data/directory]");
             check("json_false.settings", "seed_provider.parameters", "{seeds=127.0.0.1:7000}");
         }
+    }
+
+    @Test
+    public void testErrorReportingExclusionsRenderAsJson()
+    {
+        config.client_error_reporting_exclusions = new SubnetGroups(List.of("10.110.60.0/26"));
+        check("client_error_reporting_exclusions.subnets", "[\"10.110.60.0/26\"]");
     }
 }
