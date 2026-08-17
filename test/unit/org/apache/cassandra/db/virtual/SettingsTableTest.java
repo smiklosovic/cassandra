@@ -18,16 +18,23 @@
 
 package org.apache.cassandra.db.virtual;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.Row;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.ImmutableList;
 
 import org.junit.Assert;
@@ -45,6 +52,7 @@ import org.apache.cassandra.config.EncryptionOptions.ServerEncryptionOptions.Bui
 import org.apache.cassandra.config.EncryptionOptions.ServerEncryptionOptions.InternodeEncryption;
 import org.apache.cassandra.config.JMXServerOptions;
 import org.apache.cassandra.config.ParameterizedClass;
+import org.apache.cassandra.config.Properties;
 import org.apache.cassandra.config.Redacted;
 import org.apache.cassandra.config.SubnetGroups;
 import org.apache.cassandra.config.TransparentDataEncryptionOptions;
@@ -88,6 +96,24 @@ public class SettingsTableTest extends CQLTester
                                                                                           "alias",
                                                                                           new ParameterizedClass("SomeClass",
                                                                                                                  params));
+
+        // populate settings that default to null, so their rendering is exercised by the tests
+        // (in particular testCollectionSettingsRenderAsValidJson) instead of being skipped
+        config.crypto_provider = new ParameterizedClass("org.apache.cassandra.security.JREProvider",
+                                                        Map.of("fail_on_missing_provider", "false"));
+        config.internode_authenticator = new ParameterizedClass("org.apache.cassandra.auth.AllowAllInternodeAuthenticator",
+                                                                Map.of());
+        config.commitlog_compression = new ParameterizedClass("LZ4Compressor",
+                                                              Map.of("lz4_compressor_type", "fast"));
+        config.hints_compression = new ParameterizedClass("SnappyCompressor",
+                                                          Map.of("chunk_length_in_kb", "64"));
+        config.default_compaction = new ParameterizedClass("SizeTieredCompactionStrategy",
+                                                           Map.of("min_threshold", "4"));
+        // populated (rather than default-empty) so the CASSANDRA-21579 fix for SubnetGroups.Group
+        // is exercised through the production render path
+        config.client_error_reporting_exclusions = new SubnetGroups(List.of("127.0.0.1", "10.110.60.0/26"));
+        config.internode_error_reporting_exclusions = new SubnetGroups(List.of("192.168.0.0/16"));
+
         table = new SettingsTable(KS_NAME, config);
         VirtualKeyspaceRegistry.instance.register(new VirtualKeyspace(KS_NAME, ImmutableList.of(table)));
         disablePreparedReuseForTest();
@@ -418,10 +444,100 @@ public class SettingsTableTest extends CQLTester
         }
     }
 
+    /**
+     * Every array/collection/map-valued setting (the only shapes {@link SettingsTable} renders as
+     * JSON; scalars are rendered via toString() by design) must produce valid JSON:
+     * 1) whatever the current config renders must parse as a JSON array or object, and
+     * 2) every element type must be visible to Jackson, so that a populated value cannot silently
+     *    fall back to toString() the way SubnetGroups.Group did (CASSANDRA-21579).
+     */
     @Test
-    public void testErrorReportingExclusionsRenderAsJson()
+    public void testCollectionSettingsRenderAsValidJson()
     {
-        config.client_error_reporting_exclusions = new SubnetGroups(List.of("10.110.60.0/26"));
-        check("client_error_reporting_exclusions.subnets", "[\"10.110.60.0/26\"]");
+        // note: normally-null and normally-empty settings are populated in config() so this check
+        // exercises their real rendering rather than skipping nulls / serializing empty collections
+        Set<String> failures = new TreeSet<>();
+
+        for (Map.Entry<String, Property> e : Properties.defaultLoader().flatten(Config.class).entrySet())
+        {
+            Property prop = e.getValue();
+            Class<?> type = prop.getType();
+
+            List<Class<?>> elements = new java.util.ArrayList<>();
+            if (type.isArray())
+            {
+                elements.add(type.getComponentType());
+            }
+            else if (Collection.class.isAssignableFrom(type) || Map.class.isAssignableFrom(type))
+            {
+                Class<?>[] args = prop.getActualTypeArguments();
+                if (args != null)
+                {
+                    if (Map.class.isAssignableFrom(type) && args.length == 2)
+                        elements.add(args[1]); // keys are stringified by SettingsTable; values serialize as-is
+                    else if (args.length >= 1)
+                        elements.add(args[0]);
+                }
+            }
+            else
+            {
+                continue; // scalar settings are rendered via toString() by design
+            }
+
+            // 1) the rendered value, through the production path, must be valid JSON
+            String rendered = table.getValue(prop);
+            if (rendered != null)
+            {
+                try
+                {
+                    JsonNode node = JsonUtils.JSON_OBJECT_MAPPER.readTree(rendered);
+                    if (!node.isArray() && !node.isObject())
+                        failures.add(e.getKey() + ": rendered as neither JSON array nor object: " + rendered);
+                }
+                catch (Exception ex)
+                {
+                    failures.add(e.getKey() + ": rendered value is not valid JSON: " + rendered);
+                }
+            }
+
+            // 2) element types must be Jackson-visible, or a populated value will silently degrade
+            for (Class<?> element : elements)
+                if (element != null && !jacksonVisible(element))
+                    failures.add(e.getKey() + ": element type " + element.getName() +
+                                 " has no Jackson-visible properties; annotate it (e.g. @JsonValue, the way" +
+                                 " SubnetGroups.Group was fixed in CASSANDRA-21579) or its setting will" +
+                                 " silently fall back to toString() when populated");
+        }
+
+        Assert.assertTrue(String.join("\n", failures), failures.isEmpty());
+    }
+
+    /** approximates Jackson's default serialization visibility */
+    private static boolean jacksonVisible(Class<?> type)
+    {
+        if (type.isPrimitive() || type.isEnum() || type.isInterface())
+            return true; // interfaces: the runtime type decides, cannot be judged statically
+        if (type.getName().startsWith("java.") || type.getName().startsWith("javax."))
+            return true;
+        if (CharSequence.class.isAssignableFrom(type) || Number.class.isAssignableFrom(type)
+            || Boolean.class == type || Character.class == type)
+            return true;
+
+        for (Method method : type.getMethods())
+        {
+            if (method.isAnnotationPresent(JsonValue.class))
+                return true;
+            if (Modifier.isStatic(method.getModifiers()) || method.getParameterCount() != 0)
+                continue;
+            String name = method.getName();
+            if ((name.startsWith("get") && name.length() > 3 && !name.equals("getClass"))
+                || (name.startsWith("is") && name.length() > 2 && (method.getReturnType() == boolean.class || method.getReturnType() == Boolean.class)))
+                return true;
+        }
+        for (Field field : type.getFields())
+            if (!Modifier.isStatic(field.getModifiers()))
+                return true;
+
+        return false;
     }
 }
