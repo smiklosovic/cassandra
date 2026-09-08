@@ -181,7 +181,7 @@ public class EndpointStateTest
         states.put(ApplicationState.TOKENS, tokensValue);
         states.put(ApplicationState.RELEASE_VERSION, valueFactory.releaseVersion());
 
-        String rendered = EndpointState.formatAppStateMapForLogging(states);
+        String rendered = EndpointState.formatAppStateMapForLogging(states, false);
 
         assertTrue(rendered.contains("TOKENS=Value(<16 tokens>," + tokensValue.version + ')'));
         assertFalse(rendered.contains(tokensValue.value));
@@ -197,7 +197,7 @@ public class EndpointStateTest
         String truncatedTokenBlob = new String(truncatedTokenBytes, ISO_8859_1);
         states.put(ApplicationState.TOKENS, VersionedValue.unsafeMakeVersionedValue(truncatedTokenBlob, 1));
 
-        String rendered = EndpointState.formatAppStateMapForLogging(states);
+        String rendered = EndpointState.formatAppStateMapForLogging(states, false);
 
         assertTrue(rendered.contains("TOKENS=Value(<6 undecodable bytes>,1)"));
     }

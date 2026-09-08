@@ -2076,7 +2076,9 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean, 
             totalPolls++;
             if (currentSize == epSize)
             {
-                logger.debug("Gossip looks settled. {}", Gossiper.instance.endpointStateMap);
+                if (logger.isDebugEnabled())
+                    logger.debug("Gossip looks settled. {}", getEndpointStateMapLogMessage(logger.isTraceEnabled()));
+
                 numOkay++;
             }
             else
@@ -2096,6 +2098,15 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean, 
             logger.info("Gossip settled after {} extra polls; proceeding", totalPolls - GOSSIP_SETTLE_POLL_SUCCESSES_REQUIRED);
         else
             logger.info("No gossip backlog; proceeding");
+    }
+
+    private static String getEndpointStateMapLogMessage(boolean forTracing)
+    {
+        return new HashMap<>(Gossiper.instance.endpointStateMap)
+               .entrySet()
+               .stream()
+               .map(e -> e.getKey() + ": " + e.getValue().toString(forTracing))
+               .collect(Collectors.joining(","));
     }
 
     /**
@@ -2403,7 +2414,8 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean, 
                 HeartBeatState heartBeatState = new HeartBeatState(epstate.getHeartBeatState().getGeneration(), isLocal ? VersionGenerator.getNextVersion() : 0);
                 EndpointState newepstate = new EndpointState(heartBeatState, newStates);
                 unsafeUpdateEpStates(endpoint, newepstate);
-                logger.debug("Updated epstates for {}: {}", endpoint, newepstate);
+                if (logger.isDebugEnabled())
+                    logger.debug("Updated epstates for {}: {}", endpoint, newepstate.toString(logger.isTraceEnabled()));
             });
         }
         catch (Exception e)

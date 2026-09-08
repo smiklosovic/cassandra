@@ -20,8 +20,10 @@ package org.apache.cassandra.gms;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -40,6 +42,7 @@ import org.apache.cassandra.config.CassandraRelevantProperties;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
@@ -331,32 +334,63 @@ public class EndpointState
 
     public String toString()
     {
+        return toString(false);
+    }
+
+    public String toString(boolean forTracing)
+    {
         View view = ref.get();
-        return "EndpointState: HeartBeatState = " + view.hbState + ", AppStateMap = " + formatAppStateMapForLogging(view.applicationState) + ", isAlive = " + isAlive;
+        return "EndpointState: HeartBeatState = " + view.hbState +
+               ", AppStateMap = " + formatAppStateMapForLogging(view.applicationState, forTracing) +
+               ", isAlive = " + isAlive;
     }
 
     /**
      * TOKENS is stored as an ISO-8859-1 string just to hold raw bytes, so printing it as-is dumps unreadable
      * control characters into the logs. This renders it as a token count instead (see CASSANDRA-21417).
      */
-    static String formatAppStateMapForLogging(Map<ApplicationState, VersionedValue> applicationState)
+    static String formatAppStateMapForLogging(Map<ApplicationState, VersionedValue> applicationState, boolean forTracing)
     {
         IPartitioner partitioner = DatabaseDescriptor.getPartitioner();
         return applicationState.entrySet().stream().map(entry -> {
+
             if (entry.getKey() != ApplicationState.TOKENS)
                 return entry.getKey() + "=" + entry.getValue();
 
-            final VersionedValue value = entry.getValue();
-            try
+            VersionedValue value = entry.getValue();
+            List<Token> tokens = new ArrayList<>();
+
+            try (DataInputStream dis = new DataInputStream(new ByteArrayInputStream(value.toBytes())))
             {
-                int numTokens = TokenSerializer.deserialize(partitioner, new DataInputStream(new ByteArrayInputStream(value.toBytes())))
-                                                .size();
-                return entry.getKey() + "=Value(<" + numTokens + " tokens>," + value.version + ')';
+                tokens.addAll(TokenSerializer.deserialize(partitioner, dis));
             }
             catch (Throwable t)
             {
                 // catches OutOfMemoryError too, since a corrupt length prefix can trigger a huge allocation
                 return entry.getKey() + "=Value(<" + value.toBytes().length + " undecodable bytes>," + value.version + ')';
+            }
+
+            if (forTracing)
+            {
+                StringBuilder stringBuilder = new StringBuilder();
+                for (int i = 0; i < tokens.size(); i++)
+                {
+                    String tokenValueString = tokens.get(i).getTokenValue().toString();
+                    if (i == tokens.size() - 1)
+                        stringBuilder.append(tokenValueString);
+                    else
+                    {
+                        stringBuilder.append(tokenValueString);
+                        stringBuilder.append(", ");
+                    }
+                }
+
+                return entry.getKey() + "=Value(" + stringBuilder + ',' + value.version + ')';
+            }
+            else
+            {
+                int numTokens = tokens.size();
+                return entry.getKey() + "=Value(<" + numTokens + " tokens>," + value.version + ')';
             }
         }).collect(Collectors.joining(", ", "{", "}"));
     }
