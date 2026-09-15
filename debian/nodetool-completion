@@ -4428,10 +4428,19 @@ function _picocli_nodetool_cms_initialize() {
 function _picocli_nodetool_cms_reconfigure() {
   # Get completion data
   local curr_word=${COMP_WORDS[COMP_CWORD]}
+  local prev_word=${COMP_WORDS[COMP_CWORD-1]}
 
   local commands=""
   local flag_opts="'--status' '-r' '--resume' '-c' '--cancel'"
-  local arg_opts=""
+  local arg_opts="'-i' '--ignore'"
+
+  type compopt &>/dev/null && compopt +o default
+
+  case ${prev_word} in
+    '-i'|'--ignore')
+      return
+      ;;
+  esac
 
   if [[ "${curr_word}" == -* ]]; then
     COMPREPLY=( $(compgen -W "${flag_opts} ${arg_opts}" -- "${curr_word}") )
@@ -4514,7 +4523,7 @@ function _picocli_nodetool_cms_dump() {
   local commands=""
   local flag_opts=""
   local arg_opts="'-e' '--epoch' '-te' '--transform-epoch' '-sv' '--serialization-version'"
-  local serialization_version_option_args=("OLD" "V0" "V1" "V2" "V3" "V4" "V5" "V6" "V7" "V8" "V9" "UNKNOWN") # --serialization-version values
+  local serialization_version_option_args=("OLD" "V0" "V1" "V2" "V3" "V4" "V5" "V6" "V7" "V8" "V9" "V10" "UNKNOWN") # --serialization-version values
 
   type compopt &>/dev/null && compopt +o default
 

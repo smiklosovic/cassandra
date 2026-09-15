@@ -575,7 +575,7 @@
     </target>
 
 
-    <target name="check-gen-autocomplete"
+    <target name="gen-autocomplete-check"
             depends="_main-jar"
             description="Verify that the nodetool autocomplete script is up to date">
 
@@ -619,13 +619,23 @@
             <filelist files="${license.header},${autocomplete.tmp.dir}/nodetool.tmp"/>
         </concat>
 
-        <exec executable="diff" failonerror="true">
+        <!-- Capture the exit code rather than failing here, so the temporary directory is always
+             cleaned up; the build is failed below once that is done. -->
+        <exec executable="diff" resultproperty="autocomplete.check.result">
             <arg value="-u"/>
             <arg value="${autocomplete.dir}/nodetool-completion"/>
             <arg value="${autocomplete.tmp.dir}/nodetool"/>
         </exec>
 
         <delete dir="${autocomplete.tmp.dir}"/>
+
+        <fail message="debian/nodetool-completion is out of date with the nodetool CLI. Regenerate it with `ant gen-autocomplete` and commit the result.">
+            <condition>
+                <not>
+                    <equals arg1="${autocomplete.check.result}" arg2="0"/>
+                </not>
+            </condition>
+        </fail>
     </target>
 
     <target name="init" >
@@ -882,7 +892,7 @@
         </javac>
     </target>
 
-    <target depends="init,gen-autocomplete,gen-cql3-grammar,generate-cql-html,generate-jflex-java,gen-java-copies"
+    <target depends="init,gen-cql3-grammar,generate-cql-html,generate-jflex-java,gen-java-copies"
             name="build-project">
         <echo message="${ant.project.name}: ${ant.file}"/>
         <!-- Order matters! -->
@@ -894,7 +904,8 @@
         <copy todir="${basedir}/conf" file="${build.classes.main}/META-INF/hotspot_compiler"/>
     </target>
 
-    <target name="check" depends="_main-jar,check-gen-autocomplete,build-test,gen-asciidoc" description="Verifies the source code and dependencies. This task is intended to run on pre-commit and locally. It should verify mostly modified files compared to the upstream base branch." unless="check.skip">
+    <target name="check" depends="_main-jar,build-test,gen-asciidoc" description="Verifies the source code and dependencies. This task is intended to run on pre-commit and locally. It should verify mostly modified files compared to the upstream base branch." unless="check.skip">
+        <antcall target="gen-autocomplete-check" inheritrefs="true"/>
         <antcall target="rat-check" inheritrefs="true"/>
         <antcall target="checkstyle" inheritrefs="true"/>
         <antcall target="checkstyle-test" inheritrefs="true"/>
