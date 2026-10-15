@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,6 +44,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import javax.annotation.Nullable;
 import javax.management.openmbean.CompositeData;
 
 import com.github.benmanes.caffeine.cache.Cache;
@@ -66,6 +68,7 @@ import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.compression.CompressionDictionary.DictId;
+import org.apache.cassandra.db.compression.CompressionDictionary.LightweightCompressionDictionary;
 import org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.Compression;
 import org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.TableSpec;
 import org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.WriteRow;
@@ -88,15 +91,20 @@ import static accord.utils.Property.commands;
 import static accord.utils.Property.stateful;
 import static java.lang.String.format;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.DATA_PER_SAMPLE_SIZE;
+import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.LOCAL_CHANCE;
+import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.LOCAL_LATEST;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.ROWS_PER_PARTITION;
+import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.awaitHigherDictionaryId;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.checkCached;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.checkCompressors;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.compressorCache;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.copy;
+import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.currentDictionary;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.describeEviction;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.dictionaryCache;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.difference;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.evict;
+import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.isLocalLatest;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.isNotNewer;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.isReleased;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.key;
@@ -104,15 +112,17 @@ import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.m
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.partitionKey;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.randomRows;
 import static org.apache.cassandra.db.compression.CompressionDictionaryFuzzing.topUpRows;
+import static org.apache.cassandra.io.compress.IDictionaryCompressor.TRAINING_GLOBAL_SCOPE_PARAMETER_NAME;
 import static org.apache.cassandra.io.compress.IDictionaryCompressor.TRAINING_MAX_DICTIONARY_SIZE_PARAMETER_NAME;
 import static org.apache.cassandra.io.compress.IDictionaryCompressor.TRAINING_MAX_TOTAL_SAMPLE_SIZE_PARAMETER_NAME;
 import static org.apache.cassandra.utils.Clock.Global.nanoTime;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Runs random steps on 15 to 20 tables, most of them compressed with Zstd dictionaries: writes, deletes, reads, flushes,
  * compactions, changes of compression, trainings of dictionaries, imports of a dictionary of one table into another,
- * creating and dropping tables, restoring a table from a copy of its sstables after it was dropped, reloading
+ * trainings and imports of dictionaries local to the node, promoting and discarding them, creating and dropping tables, restoring a table from a copy of its sstables after it was dropped, reloading
  * sstables, evicting dictionaries and compressors from their caches, waiting for them to expire, and several of these
  * at once on different tables.
  * <p>
@@ -126,7 +136,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *     <li>nothing logged an error, e.g. a "BAD RELEASE" of a reference or a failed compaction, or a warning about
  *     dictionaries.</li>
  * </ul>
- * Reads must return the rows the test wrote, and each training must complete. At the end, all tables are read once
+ * Reads must return the rows the test wrote, and each training must complete, unless the latest dictionary of the table
+ * is local, which has to be promoted or discarded first. A trained, imported or promoted dictionary must be stored with
+ * its scope and become the current one; after a discard, the newest dictionary left must. At the end, all tables are read once
  * more and dropped, and every dictionary seen in a cache during the run must be released.
  * <p>
  * {@code CompressionDictionaryClusterFuzzTest} runs such steps on a cluster.
@@ -204,6 +216,8 @@ public class CompressionDictionaryFuzzTest extends CQLTester
                .add(6, CompressionDictionaryFuzzTest::alterCompression)
                .addIf(State::hasDictionaryTable, 8, (rs, state) -> command(trainOperation(rs, state.pickDictionaryTable(rs))))
                .addIf(State::hasDictionaryTable, 3, CompressionDictionaryFuzzTest::importDictionary)
+               .addIf(State::hasDictionaryTable, 2, CompressionDictionaryFuzzTest::promoteDictionary)
+               .addIf(State::hasDictionaryTable, 2, CompressionDictionaryFuzzTest::discardDictionary)
                .addIf(state -> state.tables.size() < MAX_TABLES, 3, CompressionDictionaryFuzzTest::createNewTable)
                .addIf(state -> state.tables.size() > MIN_TABLES, 3, CompressionDictionaryFuzzTest::dropOneTable)
                .add(3, CompressionDictionaryFuzzTest::dropAndRestore)
@@ -254,8 +268,21 @@ public class CompressionDictionaryFuzzTest extends CQLTester
         // the target gets the dictionary with the id it has in the source, so two tables have equal dictionaries
         TableModel source = state.pick(rs);
         TableModel target = state.pickDictionaryTable(rs);
-        return command(format("Import the current dictionary of %s into %s", source.name, target.name),
-                       s -> s.importDictionary(source, target));
+        boolean global = !rs.decide(LOCAL_CHANCE);
+        return command(format("Import the current dictionary of %s into %s%s", source.name, target.name, global ? "" : " locally"),
+                       s -> s.importDictionary(source, target, global));
+    }
+
+    private static Command<State, Void, ?> promoteDictionary(RandomSource rs, State state)
+    {
+        TableModel table = state.pickLocalLatestTable(rs);
+        return command("Promote the latest dictionary of " + table.name, s -> s.promote(table));
+    }
+
+    private static Command<State, Void, ?> discardDictionary(RandomSource rs, State state)
+    {
+        TableModel table = state.pickLocalLatestTable(rs);
+        return command("Discard the latest dictionary of " + table.name, s -> s.discard(table));
     }
 
     private static Command<State, Void, ?> createNewTable(RandomSource rs, State state)
@@ -394,23 +421,25 @@ public class CompressionDictionaryFuzzTest extends CQLTester
     {
         boolean force = rs.nextBoolean();
         boolean await = rs.decide(0.8f);
+        boolean global = !rs.decide(LOCAL_CHANCE);
         Compression compression = table.compression;
         int maxTotalSampleSizeInKiB = compression.maxTotalSampleSizeInKiB;
-        Map<String, String> parameters = Map.of();
+        Map<String, String> parameters = new HashMap<>();
         if (rs.nextBoolean())
         {
             maxTotalSampleSizeInKiB = Compression.maxTotalSampleSizeInKiB(rs, compression.chunkLengthInKiB);
-            parameters = Map.of(TRAINING_MAX_DICTIONARY_SIZE_PARAMETER_NAME, Compression.maxDictionarySizeInKiB(rs, maxTotalSampleSizeInKiB) + "KiB",
-                                TRAINING_MAX_TOTAL_SAMPLE_SIZE_PARAMETER_NAME, maxTotalSampleSizeInKiB + "KiB");
+            parameters.put(TRAINING_MAX_DICTIONARY_SIZE_PARAMETER_NAME, Compression.maxDictionarySizeInKiB(rs, maxTotalSampleSizeInKiB) + "KiB");
+            parameters.put(TRAINING_MAX_TOTAL_SAMPLE_SIZE_PARAMETER_NAME, maxTotalSampleSizeInKiB + "KiB");
         }
+        if (!global)
+            parameters.put(TRAINING_GLOBAL_SCOPE_PARAMETER_NAME, "false");
         long minDataSize = (long) (DATA_PER_SAMPLE_SIZE * maxTotalSampleSizeInKiB * 1024);
         long seed = rs.nextLong();
-        Map<String, String> trainingParameters = parameters;
         return new Operation(format("Train a dictionary for %s%s%s%s", table.name, force ? " forcibly" : "",
                                     parameters.isEmpty() ? "" : " with " + parameters, await ? "" : " without waiting for it"),
                              s -> {
                                  s.topUp(table, minDataSize, new DefaultRandom(seed));
-                                 s.train(table, force, trainingParameters, await);
+                                 s.train(table, force, parameters, await, global);
                              });
     }
 
@@ -450,7 +479,9 @@ public class CompressionDictionaryFuzzTest extends CQLTester
             return false;
         // Ref's strong reference leak detector, running in tests 2 minutes after the start, reports every live sstable
         // of every table, system tables too, as it reaches them from global singletons like the chunk cache or loggers
-        return !event.getFormattedMessage().startsWith("Strong self-ref loop detected");
+        return !event.getFormattedMessage().startsWith("Strong self-ref loop detected")
+               // a training which was not waited for can not store its dictionary, an import stored a local one
+               && !event.getFormattedMessage().contains(LOCAL_LATEST);
     }
 
     private static String describe(ILoggingEvent event)
@@ -578,6 +609,18 @@ public class CompressionDictionaryFuzzTest extends CQLTester
             return rs.pick(tables.values().stream().filter(table -> table.compression.hasDictionary()).collect(Collectors.toList()));
         }
 
+        /**
+         * @return mostly a table whose latest dictionary is local, which can be promoted or discarded, if there is one
+         */
+        TableModel pickLocalLatestTable(RandomSource rs)
+        {
+            List<TableModel> local = tables.values().stream().filter(table -> {
+                LightweightCompressionDictionary latest = latestStored(table);
+                return table.compression.hasDictionary() && latest != null && latest.nodeId != null;
+            }).collect(Collectors.toList());
+            return !local.isEmpty() && rs.decide(0.8f) ? rs.pick(local) : pickDictionaryTable(rs);
+        }
+
         List<TableModel> pickSome(RandomSource rs, int count)
         {
             List<TableModel> candidates = new ArrayList<>(tables.values());
@@ -665,17 +708,20 @@ public class CompressionDictionaryFuzzTest extends CQLTester
             table.rows.clear();
         }
 
-        void train(TableModel table, boolean force, Map<String, String> parameters, boolean await)
+        void train(TableModel table, boolean force, Map<String, String> parameters, boolean await, boolean global)
         {
             CompressionDictionaryManager manager = cfs(table).compressionDictionaryManager();
+            LightweightCompressionDictionary latest = latestStored(table);
+            awaitHigherDictionaryId(latest == null ? -1 : latest.dictId.id);
             try
             {
                 manager.train(force, parameters);
             }
             catch (IllegalStateException e)
             {
-                // a training which was not waited for still runs
-                if (messageStartsWith(e, "Training already in progress"))
+                // a training which was not waited for still runs, or the latest dictionary has to be promoted or
+                // discarded first
+                if (messageStartsWith(e, "Training already in progress") || isLocalLatest(e))
                     return;
                 throw e;
             }
@@ -684,11 +730,112 @@ public class CompressionDictionaryFuzzTest extends CQLTester
                 return;
 
             TrainingState training = awaitTraining(table, manager);
+            // an import stored a local dictionary meanwhile
+            if (training.status == TrainingStatus.FAILED && training.failureMessage != null && training.failureMessage.contains(LOCAL_LATEST))
+                return;
             assertThat(training.status).as("training a dictionary for %s, which failed with: %s", table, training.failureMessage)
                                        .isEqualTo(TrainingStatus.COMPLETED);
-            assertThat(SystemDistributedKeyspace.retrieveLightweightLatestCompressionDictionary(keyspace, table.name, tableId(table)))
-            .as("dictionary stored for %s after the training completed", table)
-            .isNotNull();
+            LightweightCompressionDictionary stored = latestStored(table);
+            assertThat(stored).as("dictionary stored for %s after the training completed", table).isNotNull();
+            assertStoredAndCurrent(table, stored.dictId.id, global);
+        }
+
+        @Nullable
+        LightweightCompressionDictionary latestStored(TableModel table)
+        {
+            return SystemDistributedKeyspace.retrieveLightweightLatestCompressionDictionary(keyspace, table.name, tableId(table));
+        }
+
+        long currentId(TableModel table)
+        {
+            CompressionDictionary current = currentDictionary(cfs(table));
+            return current == null ? -1 : current.dictId().id;
+        }
+
+        /**
+         * Checks that the dictionary is the latest one stored for the table, with the scope it was trained or imported
+         * with, and that the table compresses with it.
+         */
+        void assertStoredAndCurrent(TableModel table, long dictId, boolean global)
+        {
+            LightweightCompressionDictionary stored = latestStored(table);
+            assertThat(stored).as("latest dictionary stored for %s", table).isNotNull();
+            assertThat(stored.dictId.id).as("latest dictionary stored for %s", table).isEqualTo(dictId);
+            assertThat(stored.nodeId).as("node the dictionary %d of %s is local to", dictId, table)
+                                     .isEqualTo(global ? null : CompressionDictionary.localNodeId());
+            assertThat(currentId(table)).as("current dictionary of %s", table).isEqualTo(dictId);
+        }
+
+        /**
+         * Waits until a training of the table which was not waited for finished, so it does not store a dictionary
+         * while a dictionary is promoted or discarded.
+         */
+        void awaitTrainingFinished(TableModel table)
+        {
+            CompressionDictionaryManager manager = cfs(table).compressionDictionaryManager();
+            TrainingStatus status = TrainingState.fromCompositeData(manager.getTrainingState()).status;
+            if (status == TrainingStatus.SAMPLING || status == TrainingStatus.TRAINING)
+                awaitTraining(table, manager);
+        }
+
+        void promote(TableModel table)
+        {
+            awaitTrainingFinished(table);
+            CompressionDictionaryManager manager = cfs(table).compressionDictionaryManager();
+            LightweightCompressionDictionary latest = latestStored(table);
+            if (latest == null || latest.nodeId == null)
+            {
+                assertThatThrownBy(manager::promoteDictionary)
+                .as("promoting the latest dictionary of %s, which is %s", table, latest == null ? "none" : latest.dictId.id + ", used by all nodes")
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(latest == null ? "Could not find a dictionary to promote" : "is already used by all nodes");
+                return;
+            }
+
+            manager.promoteDictionary();
+            logger.info("Promoted the dictionary {} of {}", latest.dictId.id, table.name);
+            LightweightCompressionDictionary promoted = latestStored(table);
+            assertThat(promoted).as("latest dictionary stored for %s after it was promoted", table).isNotNull();
+            assertThat(promoted.dictId).as("latest dictionary stored for %s after it was promoted", table).isEqualTo(latest.dictId);
+            assertThat(promoted.nodeId).as("node the promoted dictionary %d of %s is local to", latest.dictId.id, table).isNull();
+            // used already, unless dictionary compression was disabled and enabled again since: the refresh which the
+            // promotion triggers then makes it current
+            long deadline = nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (currentId(table) != latest.dictId.id)
+            {
+                if (nanoTime() > deadline)
+                    throw new AssertionError(format("%s compresses with the dictionary %d, not with the promoted dictionary %d", table, currentId(table), latest.dictId.id));
+                Uninterruptibles.sleepUninterruptibly(50, TimeUnit.MILLISECONDS);
+            }
+        }
+
+        void discard(TableModel table)
+        {
+            awaitTrainingFinished(table);
+            CompressionDictionaryManager manager = cfs(table).compressionDictionaryManager();
+            LightweightCompressionDictionary latest = latestStored(table);
+            if (latest == null || latest.nodeId == null)
+            {
+                assertThatThrownBy(manager::discardDictionary)
+                .as("discarding the latest dictionary of %s, which is %s", table, latest == null ? "none" : latest.dictId.id + ", used by all nodes")
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(latest == null ? "Could not find a dictionary to discard" : "only a local one can be discarded");
+                return;
+            }
+
+            manager.discardDictionary();
+            assertThat(SystemDistributedKeyspace.retrieveCompressionDictionary(keyspace, table.name, tableId(table), latest.dictId.id))
+            .as("discarded dictionary %d of %s", latest.dictId.id, table)
+            .isNull();
+            // a table has at most one local dictionary, its latest; the node goes back to the newest one left, or none
+            LightweightCompressionDictionary left = latestStored(table);
+            if (left == null)
+            {
+                assertThat(currentId(table)).as("current dictionary of %s, which has no dictionary left", table).isEqualTo(-1);
+                return;
+            }
+            assertThat(left.nodeId).as("node the dictionary %d of %s is local to", left.dictId.id, table).isNull();
+            assertThat(currentId(table)).as("current dictionary of %s", table).isEqualTo(left.dictId.id);
         }
 
         /**
@@ -729,7 +876,7 @@ public class CompressionDictionaryFuzzTest extends CQLTester
             }
         }
 
-        void importDictionary(TableModel source, TableModel target)
+        void importDictionary(TableModel source, TableModel target, boolean global)
         {
             // referenced, so an eviction of the source can not release it meanwhile
             Ref<? extends CompressionDictionary> ref = cfs(source).compressionDictionaryManager().refCurrent();
@@ -739,11 +886,17 @@ public class CompressionDictionaryFuzzTest extends CQLTester
             try
             {
                 CompositeData data = CompressionDictionaryDetailsTabularData.fromCompressionDictionary(keyspace, target.name, tableId(target), ref.get());
-                cfs(target).compressionDictionaryManager().importCompressionDictionary(data);
+                cfs(target).compressionDictionaryManager().importCompressionDictionary(data, global);
+                assertStoredAndCurrent(target, ref.get().dictId().id, global);
             }
             catch (IllegalArgumentException e)
             {
                 if (!isNotNewer(e))
+                    throw e;
+            }
+            catch (IllegalStateException e)
+            {
+                if (!isLocalLatest(e))
                     throw e;
             }
             finally

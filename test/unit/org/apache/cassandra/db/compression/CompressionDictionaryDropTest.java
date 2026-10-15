@@ -34,6 +34,8 @@ import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.DurationSpec;
 import org.apache.cassandra.cql3.CQLTester;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.schema.SystemDistributedKeyspace;
 import org.apache.cassandra.utils.CompressionDictionaryHelper;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,24 +64,25 @@ public class CompressionDictionaryDropTest extends CQLTester
 
     @Test
     @BMRules(rules = {
-        @BMRule(name = "refresh waits for the drop before it caches the dictionary it read",
+        @BMRule(name = "refresh waits for the drop before it uses the dictionary it read",
                 targetClass = "org.apache.cassandra.db.compression.CompressionDictionaryScheduler",
-                targetMethod = "refreshDictionaryFromSystemTable",
-                targetLocation = "AT INVOKE org.apache.cassandra.db.compression.ICompressionDictionaryCache.add",
+                targetMethod = "refreshCurrentDictionary",
+                targetLocation = "AT INVOKE org.apache.cassandra.db.compression.ICompressionDictionaryCache.setCurrent",
                 action = "org.apache.cassandra.db.compression.CompressionDictionaryDropTest.beforeAdd($0.tableName)"),
-        @BMRule(name = "refresh cached the dictionary it read",
+        @BMRule(name = "refresh used the dictionary it read",
                 targetClass = "org.apache.cassandra.db.compression.CompressionDictionaryScheduler",
-                targetMethod = "refreshDictionaryFromSystemTable",
-                targetLocation = "AFTER INVOKE org.apache.cassandra.db.compression.ICompressionDictionaryCache.add",
+                targetMethod = "refreshCurrentDictionary",
+                targetLocation = "AFTER INVOKE org.apache.cassandra.db.compression.ICompressionDictionaryCache.setCurrent",
                 action = "org.apache.cassandra.db.compression.CompressionDictionaryDropTest.afterAdd($0.tableName)")
     })
     public void refreshDuringDrop()
     {
         CompressionDictionary dictionary = CompressionDictionaryHelper.INSTANCE.trainDictionary(KEYSPACE, "trained");
         String table = createTable("CREATE TABLE %s (pk int PRIMARY KEY, v text) WITH compression = {'class': 'ZstdDictionaryCompressor'}");
-        CompressionDictionaryManager manager = getCurrentColumnFamilyStore().compressionDictionaryManager();
-        // stores the dictionary, so that the next refresh reads it
-        manager.handleNewDictionary(dictionary);
+        ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
+        CompressionDictionaryManager manager = cfs.compressionDictionaryManager();
+        // stores the dictionary without using it, so that the next refresh reads it and makes it current
+        SystemDistributedKeyspace.storeCompressionDictionary(KEYSPACE, table, cfs.metadata().id.toLongString(), dictionary);
         pausedTable = table;
 
         assertThat(Uninterruptibles.awaitUninterruptibly(read, 1, TimeUnit.MINUTES)).as("refresh read the dictionary").isTrue();
@@ -89,6 +92,7 @@ public class CompressionDictionaryDropTest extends CQLTester
 
         assertThat(Uninterruptibles.awaitUninterruptibly(added, 1, TimeUnit.MINUTES)).as("refresh added the dictionary").isTrue();
         assertThat(manager.get(dictionary.dictId())).as("cached after the refresh which read it before the drop").isNull();
+        assertThat(manager.getCurrent()).as("current after the refresh which read it before the drop").isNull();
     }
 
     public static void beforeAdd(String table)

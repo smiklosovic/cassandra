@@ -27,10 +27,12 @@ import java.util.List;
 import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.TreeSet;
+import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
 
 import com.github.benmanes.caffeine.cache.Cache;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 import accord.utils.RandomSource;
 
@@ -43,6 +45,7 @@ import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.utils.concurrent.Ref;
 
 import static java.lang.String.format;
+import static org.apache.cassandra.utils.Clock.Global.currentTimeMillis;
 
 /**
  * Data, table configurations and access to the dictionary caches shared by the fuzz tests of compression dictionaries
@@ -59,6 +62,10 @@ public final class CompressionDictionaryFuzzing
     // Before a training, a table gets at least this many times the maximum sample size of data.
     public static final double DATA_PER_SAMPLE_SIZE = 1.5;
     public static final int TOP_UP_VALUE_LENGTH = 2048;
+    // share of trainings and imports of dictionaries used only by the node which trains or imports them
+    public static final float LOCAL_CHANCE = 0.3f;
+    // how training, importing and logging a failed training tell that the latest dictionary is local to a node
+    public static final String LOCAL_LATEST = "promote or discard it first";
 
     private static final String[] LEVELS = { "TRACE", "DEBUG", "INFO", "WARN", "ERROR" };
     private static final String[] SERVICES = { "UserService", "PaymentService", "OrderService", "InventoryService", "SearchService" };
@@ -291,6 +298,30 @@ public final class CompressionDictionaryFuzzing
     }
 
     /**
+     * The id of a trained dictionary starts with the second it was trained in, the rest of it is random, so of two
+     * dictionaries trained in the same second the later one can have the lower id, and then it is not the latest
+     * dictionary of its table. Waits until a dictionary trained from now on gets a higher id than the given one.
+     *
+     * @param dictId id of the latest dictionary of a table, negative if it has none
+     */
+    public static void awaitHigherDictionaryId(long dictId)
+    {
+        if (dictId < 0)
+            return;
+        while (ZstdDictionaryTrainer.makeDictionaryId(currentTimeMillis(), 0) >>> 32 <= dictId >>> 32)
+            Uninterruptibles.sleepUninterruptibly(10, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * @return whether a training or an import was rejected because the latest dictionary of the table is local to a
+     *         node, which has to be promoted or discarded first
+     */
+    public static boolean isLocalLatest(IllegalStateException e)
+    {
+        return e.getMessage() != null && e.getMessage().contains(LOCAL_LATEST);
+    }
+
+    /**
      * @return whether an import was rejected because the target has a newer dictionary, or already has this one, e.g.
      *         imported from the same source before
      */
@@ -334,6 +365,19 @@ public final class CompressionDictionaryFuzzing
     {
         Object cache = field(CompressionDictionaryManager.class, cfs.compressionDictionaryManager(), "cache");
         return (Cache<DictId, CompressionDictionary>) field(CompressionDictionaryCache.class, cache, "cache");
+    }
+
+    /**
+     * Unlike {@link CompressionDictionaryManager#getCurrent()}, this does not touch the cache entry of the current
+     * dictionary, so checking it does not keep the entry from expiring.
+     *
+     * @return the dictionary the table compresses with, null if none
+     */
+    @Nullable
+    public static CompressionDictionary currentDictionary(ColumnFamilyStore cfs)
+    {
+        Object cache = field(CompressionDictionaryManager.class, cfs.compressionDictionaryManager(), "cache");
+        return (CompressionDictionary) field(CompressionDictionaryCache.class, cache, "current");
     }
 
     /**
