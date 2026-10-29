@@ -21,15 +21,36 @@ package org.apache.cassandra.transport.messages;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import org.apache.cassandra.config.CassandraRelevantProperties;
+import org.apache.cassandra.distributed.shared.WithProperties;
 import org.apache.cassandra.transport.Message;
 import org.apache.cassandra.transport.ProtocolException;
 import org.apache.cassandra.transport.ProtocolVersion;
 
 public class StartupMessageTest extends EncodeAndDecodeTestBase<StartupMessage>
 {
+    static WithProperties properties;
+
+    @BeforeClass
+    public static void setOptionLimits()
+    {
+        // Limits default to -1 (unlimited); set them to the values these tests expect.
+        properties = new WithProperties().set(CassandraRelevantProperties.STARTUP_CLIENT_OPTION_MAX_COUNT, 64)
+                                         .set(CassandraRelevantProperties.STARTUP_CLIENT_OPTION_KEY_MAX_LENGTH, 256)
+                                         .set(CassandraRelevantProperties.STARTUP_CLIENT_OPTION_VALUE_MAX_LENGTH, 1024);
+    }
+
+    @AfterClass
+    public static void clearOptionLimits()
+    {
+        properties.close();
+    }
+
     @Test
     public void testEncodeAndDecode()
     {
@@ -99,11 +120,29 @@ public class StartupMessageTest extends EncodeAndDecodeTestBase<StartupMessage>
         StartupMessage.validateOptions(Map.of(StartupMessage.CQL_VERSION, "3.0.0", "DRIVER_NAME", "🚀-Cassandra-Driver-é"));
     }
 
+    @Test
+    public void testSupplementaryCodePointAllowed()
+    {
+        // U+1000A is a valid supplementary code point whose low 16 bits are 0x000A ('\n'); it must
+        // not be truncated to a char and mistaken for a newline.
+        String value = new String(Character.toChars(0x1000A));
+        StartupMessage.validateOptions(Map.of(StartupMessage.CQL_VERSION, "3.0.0", "KEY", value));
+    }
+
     @Test(expected = ProtocolException.class)
     public void testBidiOverrideFormatCharRejected()
     {
         // U+202E is a bidirectional text override formatting character (Right-to-Left Override)
         StartupMessage.validateOptions(Map.of("KEY", "value\u202Espoofed"));
+    }
+
+    @Test
+    public void testNegativeLimitMeansUnlimited()
+    {
+        try (WithProperties ignored = new WithProperties().set(CassandraRelevantProperties.STARTUP_CLIENT_OPTION_VALUE_MAX_LENGTH, -1))
+        {
+            StartupMessage.validateOptions(Map.of(StartupMessage.CQL_VERSION, "3.0.0", "KEY", "b".repeat(5000)));
+        }
     }
 
     @Test

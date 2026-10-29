@@ -21,6 +21,7 @@ import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
@@ -165,26 +166,15 @@ public final class ConnectedClient
 
     public Map<String, String> asMap()
     {
-        Map<String, String> rawOptions = clientOptions().orElse(Collections.emptyMap());
-        StringBuilder optionsBuilder = new StringBuilder();
-        boolean first = true;
-        for (Map.Entry<String, String> entry : rawOptions.entrySet())
-        {
-            if (!first)
-            {
-                optionsBuilder.append(", ");
-            }
-            optionsBuilder.append(escapeOptionString(entry.getKey()))
-                          .append('=')
-                          .append(escapeOptionString(entry.getValue()));
-            first = false;
-        }
-
         return ImmutableMap.<String, String>builder()
                            .put(ADDRESS, remoteAddress().toString())
                            .put(USER, username().orElse(UNDEFINED))
                            .put(VERSION, String.valueOf(protocolVersion()))
-                           .put(CLIENT_OPTIONS, optionsBuilder.toString())
+                           .put(CLIENT_OPTIONS, clientOptions().orElse(Collections.emptyMap())
+                                                               .entrySet()
+                                                               .stream()
+                                                               .map(e -> escapeOptionString(e.getKey()) + '=' + escapeOptionString(e.getValue()))
+                                                               .collect(Collectors.joining(", ")))
                            .put(DRIVER_NAME, driverName().orElse(UNDEFINED))
                            .put(DRIVER_VERSION, driverVersion().orElse(UNDEFINED))
                            .put(REQUESTS, String.valueOf(requestCount()))
@@ -210,6 +200,8 @@ public final class ConnectedClient
      */
     static String escapeOptionString(String str)
     {
+        if (str == null)
+            return "";
         return StringUtils.replaceEach(str, SEARCH, REPLACE);
     }
 }

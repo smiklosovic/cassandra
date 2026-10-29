@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.transport.messages;
 
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,6 +26,7 @@ import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import org.apache.cassandra.auth.IAuthenticator;
+import org.apache.cassandra.config.CassandraRelevantProperties;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.guardrails.Guardrails;
 import org.apache.cassandra.service.ClientState;
@@ -57,9 +57,6 @@ public class StartupMessage extends Message.Request
     public static final String DRIVER_NAME = "DRIVER_NAME";
     public static final String DRIVER_VERSION = "DRIVER_VERSION";
     public static final String THROW_ON_OVERLOAD = "THROW_ON_OVERLOAD";
-    public static final int MAX_OPTION_KEY_LENGTH = 256;
-    public static final int MAX_OPTION_VALUE_LENGTH = 1024;
-    public static final int MAX_OPTION_COUNT = 64;
 
     public static final Message.Codec<StartupMessage> codec = new Message.Codec<StartupMessage>()
     {
@@ -194,7 +191,7 @@ public class StartupMessage extends Message.Request
      * @param isKey true if validating a key, false if validating a value
      * @throws ProtocolException if the string violates validation constraints
      */
-    private static void validateString(String str, boolean isKey)
+    private static void validateString(String str, boolean isKey, int maxLength)
     {
         if (str == null)
         {
@@ -203,37 +200,51 @@ public class StartupMessage extends Message.Request
             return;
         }
 
+        int utf8Length = 0;
         for (int i = 0; i < str.length(); )
         {
             int cp = str.codePointAt(i);
-            char c = (char) cp;
 
-            if (c == '\n' || c == '\r')
+            if (cp == '\n' || cp == '\r')
                 throw new ProtocolException(String.format("Startup option %s contains a newline character at index %d", isKey ? "key" : "value", i));
 
+            int type = Character.getType(cp);
             if ((Character.isISOControl(cp) && cp != '\t') ||
-                Character.getType(cp) == Character.SURROGATE ||
-                Character.getType(cp) == Character.FORMAT ||
-                Character.getType(cp) == Character.LINE_SEPARATOR ||
-                Character.getType(cp) == Character.PARAGRAPH_SEPARATOR)
+                type == Character.SURROGATE ||
+                type == Character.FORMAT ||
+                type == Character.LINE_SEPARATOR ||
+                type == Character.PARAGRAPH_SEPARATOR)
             {
                 throw new ProtocolException(String.format("Startup option %s contains a forbidden control or formatting character at index %d", isKey ? "key" : "value", i));
             }
+
+            // accumulate the UTF-8 byte length here to avoid a second pass and a throwaway byte[] (lone
+            // surrogates are rejected above, so cp is always a valid scalar value by this point)
+            utf8Length += utf8ByteCount(cp);
             i += Character.charCount(cp);
         }
 
-        // 2. Check length AFTER character scan is complete
-        int maxLength = isKey ? MAX_OPTION_KEY_LENGTH : MAX_OPTION_VALUE_LENGTH;
-        byte[] utf8Bytes = str.getBytes(StandardCharsets.UTF_8);
-        if (utf8Bytes.length > maxLength)
-        {
-            String target = isKey
-                            ? String.format("key '%s'", StringEscapeUtils.escapeJava(StringUtils.abbreviate(str, 23)))
-                            : "value";
+        // Byte-length limit is opt-in; a negative limit means unlimited.
+        if (maxLength < 0 || utf8Length <= maxLength)
+            return;
 
-            throw new ProtocolException(String.format("Startup option %s exceeds maximum byte length: %d (maximum allowed is %d)",
-                                                      target, utf8Bytes.length, maxLength));
-        }
+        String target = isKey
+                        ? String.format("key '%s'", StringEscapeUtils.escapeJava(StringUtils.abbreviate(str, 23)))
+                        : "value";
+
+        throw new ProtocolException(String.format("Startup option %s exceeds maximum byte length: %d (maximum allowed is %d)",
+                                                  target, utf8Length, maxLength));
+    }
+
+    private static int utf8ByteCount(int codePoint)
+    {
+        if (codePoint < 0x80)
+            return 1;
+        if (codePoint < 0x800)
+            return 2;
+        if (codePoint < 0x10000)
+            return 3;
+        return 4;
     }
 
     @VisibleForTesting
@@ -242,13 +253,17 @@ public class StartupMessage extends Message.Request
         if (options == null || options.isEmpty())
             return;
 
-        if (options.size() > MAX_OPTION_COUNT)
-            throw new ProtocolException(String.format("Too many startup options provided: %d (maximum allowed is %d)", options.size(), MAX_OPTION_COUNT));
+        int maxCount = CassandraRelevantProperties.STARTUP_CLIENT_OPTION_MAX_COUNT.getInt();
+        int maxKeyLength = CassandraRelevantProperties.STARTUP_CLIENT_OPTION_KEY_MAX_LENGTH.getInt();
+        int maxValueLength = CassandraRelevantProperties.STARTUP_CLIENT_OPTION_VALUE_MAX_LENGTH.getInt();
+
+        if (maxCount >= 0 && options.size() > maxCount)
+            throw new ProtocolException(String.format("Too many startup options provided: %d (maximum allowed is %d)", options.size(), maxCount));
 
         for (Map.Entry<String, String> entry : options.entrySet())
         {
-            validateString(entry.getKey(), true);
-            validateString(entry.getValue(), false);
+            validateString(entry.getKey(), true, maxKeyLength);
+            validateString(entry.getValue(), false, maxValueLength);
         }
     }
 
