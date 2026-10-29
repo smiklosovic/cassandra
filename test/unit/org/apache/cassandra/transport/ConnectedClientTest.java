@@ -19,10 +19,42 @@
 package org.apache.cassandra.transport;
 
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
+
+import org.apache.cassandra.auth.AuthenticatedUser;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.service.ClientState;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class ConnectedClientTest
 {
+    @BeforeClass
+    public static void setup()
+    {
+        DatabaseDescriptor.daemonInitialization();
+    }
+
+    @Test
+    public void clientIsNotVisibleUntilAuthenticated()
+    {
+        ServerConnection connection = mock(ServerConnection.class);
+        ClientState state = mock(ClientState.class);
+        when(connection.getClientState()).thenReturn(state);
+        ConnectedClient client = new ConnectedClient(connection);
+
+        // sent STARTUP but not logged in yet: no authenticated user -> must not surface in operator-facing views
+        when(state.getUser()).thenReturn(null);
+        Assert.assertFalse(client.loggedIn());
+        Assert.assertNull(client.asMap(false));
+
+        // once authenticated it becomes visible
+        when(state.getUser()).thenReturn(new AuthenticatedUser("test"));
+        Assert.assertTrue(client.loggedIn());
+    }
+
     @Test
     public void testEscapeOptionString()
     {

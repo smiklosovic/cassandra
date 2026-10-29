@@ -164,8 +164,25 @@ public final class ConnectedClient
         return connection.channel().pipeline().get(SslHandler.class);
     }
 
+    /**
+     * @return true once the client has authenticated (has a user). Clients that have sent STARTUP but not yet
+     * logged in are not shown in operator-facing views, since their options are attacker-controlled pre-auth.
+     */
+    public boolean loggedIn()
+    {
+        return state() != null && state().getUser() != null;
+    }
+
     public Map<String, String> asMap()
     {
+        return asMap(true);
+    }
+
+    public Map<String, String> asMap(boolean displayWhenUnauthenticated)
+    {
+        if (!displayWhenUnauthenticated && !loggedIn())
+            return null;
+
         return ImmutableMap.<String, String>builder()
                            .put(ADDRESS, remoteAddress().toString())
                            .put(USER, username().orElse(UNDEFINED))
