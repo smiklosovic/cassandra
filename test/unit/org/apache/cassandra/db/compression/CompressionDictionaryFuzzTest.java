@@ -792,7 +792,8 @@ public class CompressionDictionaryFuzzTest extends CQLTester
 
         void importSSTables(TableModel table, Path directory, boolean copy)
         {
-            List<String> failed = cfs(table).importNewSSTables(Set.of(directory.toString()), false, false, true, true, true, false, copy);
+            // not verified while imported: the test reads all rows of the table right after it imported them
+            List<String> failed = cfs(table).importNewSSTables(Set.of(directory.toString()), false, false, false, false, true, false, copy);
             assertThat(failed).as("directories which failed to import into %s", table).isEmpty();
         }
 

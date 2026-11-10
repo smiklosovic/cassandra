@@ -713,6 +713,10 @@ public final class Ref<T> implements RefCounted<T>
     {
         if (clazz == null || clazz == PhantomReference.class || clazz == Class.class || java.lang.reflect.Member.class.isAssignableFrom(clazz))
             return emptyList();
+        // a class loader is not a part of any leak, and its fields can not be read on JDK 21,
+        // e.g. the keys of SecureClassLoader.pdcache are records in a package which is not opened
+        if (ClassLoader.class.isAssignableFrom(clazz))
+            return emptyList();
         List<Field> fields = fieldMap.get(clazz);
         if (fields != null)
             return fields;
