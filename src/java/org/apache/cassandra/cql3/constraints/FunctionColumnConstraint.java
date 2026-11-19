@@ -92,6 +92,16 @@ public class FunctionColumnConstraint extends AbstractFunctionConstraint<Functio
         this.function.columnName = columnName;
     }
 
+    @Override
+    public FunctionColumnConstraint copy()
+    {
+        // the function holds the column name and the state prepared from the term, so it is not shared either
+        ConstraintFunction functionCopy = ConstraintResolver.getConstraintFunction(function.name, function.rawArgs);
+        FunctionColumnConstraint copy = new FunctionColumnConstraint(functionCopy, relationType, term);
+        copy.setColumnName(columnName);
+        return copy;
+    }
+
     public ConstraintFunction function()
     {
         return function;
@@ -232,7 +242,7 @@ public class FunctionColumnConstraint extends AbstractFunctionConstraint<Functio
         FunctionColumnConstraint other = (FunctionColumnConstraint) o;
 
         return function.equals(other.function)
-               && columnName.equals(other.columnName)
+               && Objects.equals(columnName, other.columnName)
                && relationType == other.relationType
                && term.equals(other.term);
     }

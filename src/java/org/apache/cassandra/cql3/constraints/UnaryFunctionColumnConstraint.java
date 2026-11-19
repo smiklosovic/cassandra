@@ -85,6 +85,16 @@ public class UnaryFunctionColumnConstraint extends AbstractFunctionConstraint<Un
     }
 
     @Override
+    public UnaryFunctionColumnConstraint copy()
+    {
+        // the function holds the column name, so it is not shared either
+        ConstraintFunction functionCopy = ConstraintResolver.getUnaryConstraintFunction(function.name, function.rawArgs);
+        UnaryFunctionColumnConstraint copy = new UnaryFunctionColumnConstraint(functionCopy);
+        copy.setColumnName(columnName);
+        return copy;
+    }
+
+    @Override
     public String name()
     {
         return function.name;
@@ -219,7 +229,7 @@ public class UnaryFunctionColumnConstraint extends AbstractFunctionConstraint<Un
         UnaryFunctionColumnConstraint other = (UnaryFunctionColumnConstraint) o;
 
         return function.equals(other.function)
-               && columnName.equals(other.columnName);
+               && Objects.equals(columnName, other.columnName);
     }
 
     @Override

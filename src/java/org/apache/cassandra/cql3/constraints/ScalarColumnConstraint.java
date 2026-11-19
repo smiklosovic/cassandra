@@ -105,6 +105,12 @@ public class ScalarColumnConstraint extends AbstractFunctionConstraint<ScalarCol
     }
 
     @Override
+    public ScalarColumnConstraint copy()
+    {
+        return new ScalarColumnConstraint(columnName, relationType, term);
+    }
+
+    @Override
     public List<Operator> getSupportedOperators()
     {
         return SUPPORTED_OPERATORS;
@@ -212,7 +218,7 @@ public class ScalarColumnConstraint extends AbstractFunctionConstraint<ScalarCol
 
         ScalarColumnConstraint other = (ScalarColumnConstraint) o;
 
-        return columnName.equals(other.columnName)
+        return Objects.equals(columnName, other.columnName)
                && relationType == other.relationType
                && term.equals(other.term);
     }

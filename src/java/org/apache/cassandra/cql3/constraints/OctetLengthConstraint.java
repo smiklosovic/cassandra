@@ -20,7 +20,6 @@ package org.apache.cassandra.cql3.constraints;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Objects;
 
 import org.apache.cassandra.cql3.Operator;
 import org.apache.cassandra.db.marshal.AbstractType;
@@ -81,25 +80,5 @@ public class OctetLengthConstraint extends ConstraintFunction
         {
             throw new InvalidConstraintDefinitionException(format("String '%s' is not a valid int", term));
         }
-    }
-
-    @Override
-    public boolean equals(Object o)
-    {
-        if (this == o)
-            return true;
-
-        if (!(o instanceof OctetLengthConstraint))
-            return false;
-
-        OctetLengthConstraint other = (OctetLengthConstraint) o;
-
-        return columnName.equals(other.columnName);
-    }
-
-    @Override
-    public int hashCode()
-    {
-        return Objects.hash(columnName);
     }
 }

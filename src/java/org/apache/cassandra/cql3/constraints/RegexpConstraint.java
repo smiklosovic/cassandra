@@ -20,7 +20,6 @@ package org.apache.cassandra.cql3.constraints;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -93,25 +92,5 @@ public class RegexpConstraint extends ConstraintFunction
         {
             throw new InvalidConstraintDefinitionException(format("String '%s' is not a valid regular expression", ParseUtils.unquote(term)));
         }
-    }
-
-    @Override
-    public boolean equals(Object o)
-    {
-        if (this == o)
-            return true;
-
-        if (!(o instanceof RegexpConstraint))
-            return false;
-
-        RegexpConstraint other = (RegexpConstraint) o;
-
-        return columnName.equals(other.columnName);
-    }
-
-    @Override
-    public int hashCode()
-    {
-        return Objects.hash(columnName);
     }
 }
